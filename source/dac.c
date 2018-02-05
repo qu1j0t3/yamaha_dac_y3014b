@@ -74,14 +74,13 @@ int main(void)
 
     		uint32_t v = (((N << 10) | (x & 0x3ff)) << 3) << 6; // shifted so LSB coincides with SD_MASK
     		for(uint32_t j = 0; j < 16; ++j, v >>= 1) {
-    			// this loop cycles at about 119kHz in Release level,
-    			// i.e. 16 bits are clocked out in about 8.42µs
-    			GPIOB->PDOR = ((j & 8) << 1) | (v & SD_MASK);
+    			// this loop runs 1024 times at about 171 Hz in Release level,
+    			// i.e. 16 bits are clocked out in about 5.7µs
+    			GPIOB->PDOR = ((j & 8) << 1) | (v & SD_MASK); // resets CLOCK
+    			// Clock remains low for about 100ns, the min allowable time per datasheet
 
-    			// in Release level, there is about 200ns between the LOAD transition
-    			// and the rising CLOCK pulse
-			GPIOB->PSOR = CLOCK_MASK; // 200ns pulse in Release level
-			GPIOB->PCOR = CLOCK_MASK;
+    			GPIOB->PSOR = CLOCK_MASK;
+    			// Clock remains high for just over 300ns
     		}
     }
 }
