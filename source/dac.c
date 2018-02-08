@@ -45,7 +45,8 @@
 
 #define LOAD_MASK  (1u << 4)
 #define CLOCK_MASK (1u << 5)
-#define SD_MASK    (1u << 6)
+#define SD1_MASK   (1u << 6)
+#define SD2_MASK   (1u << 15)
 
 #define N 7 // gives a ramp from 1.26 .. 3.70 V (2.44 p-p); buffering with LM2904 produces clipping ~ 3.62V, if powered at 5V
 //#define N 6 // 1.78 .. 3.08V (1.3 p-p)
@@ -62,7 +63,8 @@ int main(void)
 
     GPIO_PinInit(kGPIO_PORTE, 4, &output); // LOAD
     GPIO_PinInit(kGPIO_PORTE, 5, &output); // CLOCK
-    GPIO_PinInit(kGPIO_PORTE, 6, &output); // SD
+    GPIO_PinInit(kGPIO_PORTE, 6, &output); // SD (DAC 1)
+    GPIO_PinInit(kGPIO_PORTF, 7, &output); // SD (DAC 2)
 
     GPIOB->PDOR = 0;
     for (uint32_t x = 0; ; ++x) {
@@ -72,11 +74,12 @@ int main(void)
     		// N = S2 2^2 + S1 2^1 + S0    where S2=S1=S0=0 is not allowed
     		// Note error in the datasheet relating to the exponent, the scale is 2^(N-7) not 2^-N
 
-    		uint32_t v = (((N << 10) | (x & 0x3ff)) << 3) << 6; // shifted so LSB coincides with SD_MASK
-    		for(uint32_t j = 0; j < 16; ++j, v >>= 1) {
+		uint32_t v1 = (((N << 10) | (x & 0x3ff)) << 3) << 6;            // shifted so LSB coincides with SD1_MASK
+		uint32_t v2 = (((N << 10) | (0x3ff - (x & 0x3ff))) << 3) << 15; // shifted so LSB coincides with SD2_MASK
+    		for(uint32_t j = 0; j < 16; ++j, v1 >>= 1, v2 >>= 1) {
     			// this loop runs 1024 times at about 171 Hz in Release level,
     			// i.e. 16 bits are clocked out in about 5.7µs
-    			GPIOB->PDOR = ((j & 8) << 1) | (v & SD_MASK); // resets CLOCK
+    			GPIOB->PDOR = ((j & 8) << 1) | (v1 & SD1_MASK) | (v2 & SD2_MASK); // resets CLOCK
     			// Clock remains low for about 100ns, the min allowable time per datasheet
 
     			GPIOB->PSOR = CLOCK_MASK;
