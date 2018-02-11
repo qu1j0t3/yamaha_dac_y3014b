@@ -52,7 +52,8 @@
 #define LOAD_MASK  (1u << 4)
 #define CLOCK_MASK (1u << 5)
 
-#define N 7 // gives a ramp from 1.26 .. 3.70 V (2.44 p-p); buffering with LM2904 produces clipping ~ 3.62V, if powered at 5V
+// DAC exponents:
+//#define N 7 // gives a ramp from 1.26 .. 3.70 V (2.44 p-p); buffering with LM2904 produces clipping ~ 3.62V, if powered at 5V
 //#define N 6 // 1.78 .. 3.08V (1.3 p-p)
 //#define N 5 // 2.1 .. 2.78V (.68 p-p)
 // etc
@@ -107,7 +108,7 @@ void setDAC(unsigned channel, uint8_t x) {
 #define DAC_ZERO DAC_HALF
 #define DAC_EXPT(e) (e << 10)
 
-#define N_POINTS 900         // multiple of 4
+#define N_POINTS 60         // multiple of 4
 
 void setCoefficients(uint32_t v1, uint32_t v2) {
     v1 <<= 3; v2 <<= 3; // shift in the "filler" bits before the 10 bit mantissa
@@ -170,16 +171,15 @@ int main(void) {
     uint32_t sintab[N_POINTS];
     double k = 2*M_PI/N_POINTS;
     for(int i = 0; i < N_POINTS; ++i) {
+        int expt;
         double x = (DAC_HALF-1)*sin(i*k);
-        /*
+
         // Start at full magnitude, then reduce exponent as long as
         // doubled mantissa does not overflow 2^10.  TODO: rounding
-        for(int expt = 7; abs(x) < ((DAC_HALF-1)/2) && expt > 1; --expt) {
+        for(expt = 7; fabs(x) < ((DAC_ZERO-1)/2) && expt > 1; --expt) {
             x *= 2.0;
         }
         sintab[i] = (expt << 10) | (int)(x + DAC_HALF);
-        */
-        sintab[i] = (int)(x + DAC_ZERO + 0.5);
     }
 
     while(1) {
@@ -188,12 +188,12 @@ int main(void) {
             // the capacitor will be discharged (according to the time constant).
             // Having D6 and D7 clear disconnects the DAC from the integrator input,
             // which makes the reset cleaner (closer to DAC zero).
+
             GPIOA->PDOR = (!i << 16 /*C0 scope trigger*/) | (1 << 18 /*C2*/) | (1 << 19 /*C3*/); // reset
 
             reset_delay();
 
-            setCoefficients( DAC_EXPT(N) | sintab[i],
-                             DAC_EXPT(N) | sintab[(i + N_POINTS/4) % N_POINTS] );
+            setCoefficients( sintab[i], sintab[(i + N_POINTS/4) % N_POINTS] );
 
             GPIOA->PDOR = (1 << 30 /*D6*/) | (1 << 31 /*D7*/); // Release integrators from reset and hold
 
