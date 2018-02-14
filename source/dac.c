@@ -64,9 +64,9 @@ void reset_delay() {
     }
 }
 
-// this delay established by trial and error to avoid integrator clipping
 void delay() {
-    for (uint32_t i = 0; i < 6300; ++i) { //  500 => ~163µs
+    // 6300 = established by trial and error to avoid integrator clipping
+    for (uint32_t i = 0; i < 3000; ++i) {
         __asm("NOP"); /* delay */
     }
 }
@@ -108,18 +108,32 @@ void setDAC(unsigned channel, uint8_t x) {
 #define DAC_ZERO DAC_HALF
 #define DAC_EXPT(e) (e << 10)
 
-#define N_POINTS 60         // multiple of 4
+#define N_POINTS 20         // multiple of 4
+
+#define C0_TRIGGER      (1 << 16)
+#define C2_INTEG1_RESET (1 << 18)
+#define C3_INTEG2_RESET (1 << 19)
+#define D6_INTEG1_HOLD  (1 << 30)
+#define D7_INTEG2_HOLD  (1 << 31)
+#define E4_COEFF_LOAD   (1 << 4)
+#define E5_COEFF_CLOCK  (1 << 5)
+#define E6_COEFF_DATA1  (1 << 6)
+#define H6_COEFF_DATA2  (1 << 30)
 
 void setCoefficients(uint32_t v1, uint32_t v2) {
     v1 <<= 3; v2 <<= 3; // shift in the "filler" bits before the 10 bit mantissa
     for(uint32_t j = 0; j < 16; ++j, v1 >>= 1, v2 >>= 1) {
         // i.e. 16 bits are clocked out in about 11.2µs
-        GPIOB->PDOR = ((j & 8) << 1) | ((v1 & 1) << 6 /*E6*/) | ((v2 & 1) << 30 /*H6*/) | _WR; // resets CLOCK; hold TI DAC _WR high
+        GPIOB->PCOR = E5_COEFF_CLOCK | E6_COEFF_DATA1 | H6_COEFF_DATA2;
+        if(j == 8) GPIOB->PTOR = E4_COEFF_LOAD;
+        GPIOB->PSOR = (v1 & 1) ? E6_COEFF_DATA1 : 0;
+        GPIOB->PSOR = (v2 & 1) ? H6_COEFF_DATA2 : 0;
         // Clock remains low for about 100ns, the min allowable time per datasheet
 
-        GPIOB->PSOR = CLOCK_MASK;
+        GPIOB->PSOR = E5_COEFF_CLOCK; // shift serial data bit
         // Clock remains high for just over 300ns
     }
+    GPIOB->PCOR = E4_COEFF_LOAD; // latch coefficient and start convert
 
     // Wait 4µs max settling time!
     // (this was tuned by bracketing setting/resetting pin C0 and measuring pulse on scope)
@@ -132,6 +146,10 @@ int main(void) {
     BOARD_InitPins();
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
+
+    GPIOA->PIDR = GPIOB->PIDR = 1; // Hi-Z inputs
+    GPIOA->PDDR = GPIOB->PDDR = 0; // all inputs
+    //for(;;) ; // If uncommented, effectively shuts down with no driven outputs (safe)
 
     // GPIOA - D/C/B/A
     GPIO_PinInit(kGPIO_PORTC, 0, &output); // Utility/trigger pin
@@ -163,10 +181,10 @@ int main(void) {
     GPIOB->PDOR = LOAD_MASK;
     GPIOA->PDOR = 0;
 
-    setDAC(CH_A, 0x20);
-    setDAC(CH_B, 0x50);
-    setDAC(CH_C, 0x80);
-    setDAC(CH_D, 0xb0);
+    setDAC(CH_A, 0x40); // Limit 1
+    setDAC(CH_B, 0x80); // Offset 1
+    setDAC(CH_C, 0x60); // Offset 2
+    setDAC(CH_D, 0x40); // Limit 2
 
     uint32_t sintab[N_POINTS];
     double k = 2*M_PI/N_POINTS;
@@ -183,21 +201,28 @@ int main(void) {
     }
 
     while(1) {
-        for (uint32_t i = 0; i < N_POINTS; ++i) {
-            // Setting C2 and C3 will put the integrators into reset,
-            // the capacitor will be discharged (according to the time constant).
-            // Having D6 and D7 clear disconnects the DAC from the integrator input,
-            // which makes the reset cleaner (closer to DAC zero).
+        for(uint32_t xoff = 0x20; xoff < 0x100; xoff += 0x40) {
+            setDAC(CH_B, xoff); // Offset 1
+            setDAC(CH_C, xoff); // Offset 1
+            for (uint32_t i = 0; i < N_POINTS; ++i) {
+                // Setting C2 and C3 will put the integrators into reset,
+                // the capacitor will be discharged (according to the time constant).
+                // Having D6 and D7 clear disconnects the DAC from the integrator input,
+                // which makes the reset cleaner (closer to DAC zero).
 
-            GPIOA->PDOR = (!i << 16 /*C0 scope trigger*/) | (1 << 18 /*C2*/) | (1 << 19 /*C3*/); // reset
+                GPIOA->PCOR = D6_INTEG1_HOLD  | D7_INTEG2_HOLD;
+                GPIOA->PSOR = C2_INTEG1_RESET | C3_INTEG2_RESET;
 
-            reset_delay();
+                reset_delay();
 
-            setCoefficients( sintab[i], sintab[(i + N_POINTS/4) % N_POINTS] );
+                setCoefficients( sintab[i], sintab[(i + N_POINTS/4) % N_POINTS] );
 
-            GPIOA->PDOR = (1 << 30 /*D6*/) | (1 << 31 /*D7*/); // Release integrators from reset and hold
+                // Release integrators from reset and hold
+                GPIOA->PSOR = D6_INTEG1_HOLD  | D7_INTEG2_HOLD;
+                GPIOA->PCOR = C2_INTEG1_RESET | C3_INTEG2_RESET;
 
-            delay();
+                delay();
+            }
         }
     }
 
