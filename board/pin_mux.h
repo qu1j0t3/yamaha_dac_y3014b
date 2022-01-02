@@ -130,6 +130,36 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_DAC_SD_Y_COEFF_PIN_MASK (1U << 6U)      /*!<@brief PORT pin mask */
                                                                /* @} */
 
+/*! @name PORTC3 (number 24), Y_INT_RESET
+  @{ */
+
+/* Symbols to be used with GPIO driver */
+#define BOARD_INITPINS_Y_INT_RESET_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_Y_INT_RESET_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_Y_INT_RESET_GPIO_PORT kGPIO_PORTC    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK (1U << 19U) /*!<@brief GPIO pin mask */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_Y_INT_RESET_PORT PORTC               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_Y_INT_RESET_PIN 3U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_Y_INT_RESET_PIN_MASK (1U << 3U)      /*!<@brief PORT pin mask */
+                                                            /* @} */
+
+/*! @name PORTD7 (number 26), Y_INT_HOLD
+  @{ */
+
+/* Symbols to be used with GPIO driver */
+#define BOARD_INITPINS_Y_INT_HOLD_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_Y_INT_HOLD_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_Y_INT_HOLD_GPIO_PORT kGPIO_PORTD    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK (1U << 31U) /*!<@brief GPIO pin mask */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_Y_INT_HOLD_PORT PORTD               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_Y_INT_HOLD_PIN 7U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_Y_INT_HOLD_PIN_MASK (1U << 7U)      /*!<@brief PORT pin mask */
+                                                           /* @} */
+
 /*!
  * @brief Configures pin routing and optionally pin electrical features.
  *
