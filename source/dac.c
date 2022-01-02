@@ -113,8 +113,7 @@ void setDAC(unsigned channel, uint8_t x) {
 #define N_POINTS 64         // multiple of 4
 
 void setCoefficients(uint32_t v1, uint32_t v2) {
-	v1 <<= 2; v2 <<= 2;
-    for(uint32_t j = 0; j < 16; ++j, v1 >>= 1, v2 >>= 1) {
+    for(uint32_t j = 0; j < 14; ++j, v1 >>= 1, v2 >>= 1) {
     	// j = 0,1,2                   filler bits, ignored by DAC.
     	// j = 3,4,5,6,7,8,9,10,11,12  D0..D9   mantissa
     	// j = 13,14,15                S0..S2   exponent
@@ -133,9 +132,9 @@ void setCoefficients(uint32_t v1, uint32_t v2) {
     		BOARD_INITPINS_DAC_SD_Y_COEFF_GPIO->PCOR = BOARD_INITPINS_DAC_SD_Y_COEFF_GPIO_PIN_MASK;
     	}
 
-    	if (j == 7) {
+    	if (j == 5) {
     		BOARD_INITPINS_DAC_LOAD_GPIO->PSOR = BOARD_INITPINS_DAC_LOAD_GPIO_PIN_MASK;
-    	} else if (j == 15){
+    	} else if (j == 13){
     		BOARD_INITPINS_DAC_LOAD_GPIO->PCOR = BOARD_INITPINS_DAC_LOAD_GPIO_PIN_MASK;
     	}
 
