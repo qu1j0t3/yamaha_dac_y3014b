@@ -195,10 +195,11 @@ int main(void) {
     uint32_t sintab[N_POINTS];
     double k = 2*M_PI/N_POINTS;
     for(int i = 0; i < N_POINTS; ++i) {
-        double x = (DAC_HALF-20)*sin(i*k);
+        double x = (DAC_HALF-1)*sin(i*k);
+
         unsigned e = 7;
         double max = (DAC_HALF-1)/2.0;
-        while(e > 1 && abs(x) < max) {
+        while(e > 1 && fabs(x) < max) {
         	x *= 2;
         	--e;
         }
@@ -225,10 +226,12 @@ int main(void) {
 	    }
 	}*/
 
-    #if 0 // Test sine wave and hold switch
+    #if 1 // Test sine wave and hold switch
     for(uint32_t cycle = 0; ; ++cycle) {
 
+		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 		for (uint32_t i = 0; i < N_POINTS; ++i) {
+			BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
             // Setting C2 and C3 will put the integrators into reset,
             // the capacitor will be discharged (according to the time constant).
             // Having D6 and D7 clear disconnects the DAC from the integrator input,
