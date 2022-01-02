@@ -104,19 +104,18 @@ void setDAC(unsigned channel, uint8_t x) {
 #define DAC_ZERO DAC_HALF
 
 // Format exponent and mantissa for DAC serial input
-// e must be 1..7 (output scale *2^-7 .. *2^-1 because Exponent is negative in the DAC)
+// e must be 1..7 (output scale *2^-7 .. *2^-1 because Exponent is negated in the DAC)
 // d is the fractional part:
 // Vout = 1/2 Vdd + 1/4 Vdd (-1 + d*2^-9 + 2^-10) 2^-N
-// i.e. where d = 0    Vout = 1/2 Vdd - 1/4 Vdd * 2^-N = 3/8 Vdd where N = 1 (e=7)
 #define DAC_WORD(e, d) (((e) << 10) | (d))
 
 #define N_POINTS 64         // multiple of 4
 
 void setCoefficients(uint32_t v1, uint32_t v2) {
     for(uint32_t j = 0; j < 14; ++j, v1 >>= 1, v2 >>= 1) {
-    	// j = 0,1,2                   filler bits, ignored by DAC.
-    	// j = 3,4,5,6,7,8,9,10,11,12  D0..D9   mantissa
-    	// j = 13,14,15                S0..S2   exponent
+    	// j = 0..9  D0..D9   mantissa
+    	// j = 10..12                S0..S2   exponent
+    	// j = 13 "extra" bit not clearly discussed in the datasheet but seems to be required for LOAD timing
 
     	BOARD_INITPINS_DAC_CLOCK_GPIO->PCOR = BOARD_INITPINS_DAC_CLOCK_GPIO_PIN_MASK;
 
@@ -143,10 +142,6 @@ void setCoefficients(uint32_t v1, uint32_t v2) {
     	BOARD_INITPINS_DAC_CLOCK_GPIO->PSOR = BOARD_INITPINS_DAC_CLOCK_GPIO_PIN_MASK;
         // Min clock high time 100ns per datasheet. Actually Clock remains high for just over 300ns
     }
-
-    // Wait 4µs max settling time!
-    // (this was tuned by bracketing setting/resetting pin C0 and measuring pulse on scope)
-    //four_microsecond();
 }
 
 int main(void) {
@@ -156,19 +151,6 @@ int main(void) {
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
 /*
-    // GPIOA - D/C/B/A
-    GPIO_PinInit(kGPIO_PORTC, 0, &output); // Utility/trigger pin
-    GPIO_PinInit(kGPIO_PORTC, 2, &output); // INTEGRATOR 1 RESET
-    GPIO_PinInit(kGPIO_PORTC, 3, &output); // INTEGRATOR 2 RESET
-    GPIO_PinInit(kGPIO_PORTD, 6, &output); // INTEGRATOR 1 HOLD
-    GPIO_PinInit(kGPIO_PORTD, 7, &output); // INTEGRATOR 2 HOLD
-
-    // GPIOB - H/G/F/E
-    GPIO_PinInit(kGPIO_PORTE, 4, &output); // LOAD
-    GPIO_PinInit(kGPIO_PORTE, 5, &output); // CLOCK
-    GPIO_PinInit(kGPIO_PORTE, 6, &output); // SD (DAC 1)
-    GPIO_PinInit(kGPIO_PORTH, 6, &output); // SD (DAC 2)
-
     // TI DAC
 
     GPIO_PinInit(kGPIO_PORTA, 0, &output); // D0
@@ -183,9 +165,6 @@ int main(void) {
     GPIO_PinInit(kGPIO_PORTF, 3, &output); // A1
     GPIO_PinInit(kGPIO_PORTF, 7, &output); // _WR
 
-    GPIOB->PDOR = LOAD_MASK;
-    GPIOA->PDOR = 0;
-
     setDAC(CH_A, 0x20);
     setDAC(CH_B, 0x50);
     setDAC(CH_C, 0x80);
@@ -196,6 +175,7 @@ int main(void) {
     for(int i = 0; i < N_POINTS; ++i) {
         double x = (DAC_HALF-1)*sin(i*k);
 
+        // Find exponent scale for coefficient fraction
         unsigned e = 7;
         double max = (DAC_HALF-1)/2.0;
         while(e > 1 && fabs(x) < max) {
@@ -209,23 +189,8 @@ int main(void) {
 
 	BOARD_INITPINS_X_INT_HOLD_GPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK;
 	BOARD_INITPINS_X_INT_RESET_GPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK;
-/*
-	for(;;) {
-		setCoefficients( DAC_EXPT(N) | (DAC_ZERO + (DAC_HALF-1)), DAC_EXPT(N) | (DAC_ZERO + (DAC_HALF-1)));
-	    for (uint32_t i = 0; i < 4000000; ++i) {
-	        __asm("NOP");
-	    }
-		setCoefficients( DAC_EXPT(N) | DAC_ZERO, DAC_EXPT(N) | DAC_ZERO);
-	    for (uint32_t i = 0; i < 4000000; ++i) {
-	        __asm("NOP");
-	    }
-		setCoefficients( DAC_EXPT(N) | (DAC_ZERO - (DAC_HALF-1)), DAC_EXPT(N) | (DAC_ZERO - (DAC_HALF-1)));
-	    for (uint32_t i = 0; i < 4000000; ++i) {
-	        __asm("NOP");
-	    }
-	}*/
 
-    #if 1 // Test sine wave and hold switch
+    #if 0 // Test sine wave and hold switch
     for(uint32_t cycle = 0; ; ++cycle) {
 
 		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
@@ -249,15 +214,8 @@ int main(void) {
     }
 	#endif
 
-    // Test integrator
-
-    // Notes: 10nF integrating capacitor, ≈125Ω switch R = tc 1.25µs ; 5 tc = 6.25µs to reset integrator
-
-	for(;;) {
-	    BOARD_INITPINS_X_INT_HOLD_GPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch
-
-
-
+    // Simple step test
+    for(;0;) {
 		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 		setCoefficients( DAC_WORD(7, 0), DAC_WORD(0, DAC_ZERO) );
 		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
@@ -269,23 +227,33 @@ int main(void) {
 	    // Set DAC to most negative
 		setCoefficients( DAC_WORD(7, 1023), DAC_WORD(0, DAC_ZERO) );
 		four_microsecond(); // settling time
+    }
 
+    // Test integrator
 
-/*
+    // Notes: 10nF integrating capacitor, ≈125Ω switch R = tc 1.25µs ; 5 tc = 6.25µs to reset integrator
+
+	for(;;) {
+
+		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+		setCoefficients( DAC_WORD(1, DAC_ZERO), DAC_WORD(1, DAC_ZERO) );
+		four_microsecond(); // settling time
+		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+
 		BOARD_INITPINS_X_INT_HOLD_GPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch
 
 		BOARD_INITPINS_X_INT_RESET_GPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 		reset_delay(); // Wait reset time
-		reset_delay(); // Wait reset time
 		BOARD_INITPINS_X_INT_RESET_GPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
+
+	    BOARD_INITPINS_X_INT_HOLD_GPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch
 
 
 		// First ramp ---------------------------------------------
 
-	    BOARD_INITPINS_X_INT_HOLD_GPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch
 
 	    // Set DAC to most negative
-		setCoefficients( DAC_EXPT(N) | (DAC_ZERO - (DAC_HALF-1)), DAC_EXPT(N) | DAC_ZERO);
+		setCoefficients( DAC_WORD(7, 0), DAC_WORD(7, 0) );
 		four_microsecond(); // settling time
 
 		BOARD_INITPINS_X_INT_HOLD_GPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch
@@ -294,21 +262,21 @@ int main(void) {
 		// With 1.25 Vin (max DAC delta), C=10nF, R=1k, then 8µs integration time = 1V change
 		four_microsecond();
 		four_microsecond();
+		BOARD_INITPINS_X_INT_HOLD_GPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch
 
 
 		// Second ramp ---------------------------------------------
 
-		BOARD_INITPINS_X_INT_HOLD_GPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch
-
 		// Set DAC to most positive
-		setCoefficients( DAC_EXPT(N) | (DAC_ZERO + (DAC_HALF-1)), DAC_EXPT(N) | DAC_ZERO);
+		setCoefficients( DAC_WORD(7, 1023), DAC_WORD(7, 1023) );
 		four_microsecond(); // settling time
 
 		BOARD_INITPINS_X_INT_HOLD_GPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch
 
 		// Wait integrating time
 		four_microsecond();
-		four_microsecond();*/
+		four_microsecond();
+	    BOARD_INITPINS_X_INT_HOLD_GPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch
 	}
 
 
