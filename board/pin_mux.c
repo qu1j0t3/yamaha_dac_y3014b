@@ -22,6 +22,8 @@ pin_labels:
 - {pin_num: '4', pin_signal: PTH6/KBI1_P30, label: DAC_SD_Y_COEFF, identifier: DAC_SD_Y_COEFF}
 - {pin_num: '24', pin_signal: PTC3/KBI0_P19/FTM2_CH3/ADC0_SE11, label: Y_INT_RESET, identifier: Y_INT_RESET}
 - {pin_num: '26', pin_signal: PTD7/KBI0_P31/UART2_TX, label: Y_INT_HOLD, identifier: Y_INT_HOLD}
+- {pin_num: '77', pin_signal: PTC5/KBI0_P21/FTM1_CH1/RTCO, label: Z_BLANK, identifier: Z_BLANK}
+- {pin_num: '42', pin_signal: PTB0/KBI0_P8/UART0_RX/PWT_IN1/ADC0_SE4, label: X_FILTER, identifier: X_FILTER}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 /* clang-format on */
@@ -59,6 +61,8 @@ BOARD_InitPins:
   - {pin_num: '4', peripheral: GPIOB, signal: 'GPIO, 30', pin_signal: PTH6/KBI1_P30, direction: OUTPUT}
   - {pin_num: '24', peripheral: GPIOA, signal: 'GPIO, 19', pin_signal: PTC3/KBI0_P19/FTM2_CH3/ADC0_SE11, direction: OUTPUT}
   - {pin_num: '26', peripheral: GPIOA, signal: 'GPIO, 31', pin_signal: PTD7/KBI0_P31/UART2_TX, direction: OUTPUT}
+  - {pin_num: '77', peripheral: GPIOA, signal: 'GPIO, 21', pin_signal: PTC5/KBI0_P21/FTM1_CH1/RTCO, direction: OUTPUT}
+  - {pin_num: '42', peripheral: GPIOA, signal: 'GPIO, 8', pin_signal: PTB0/KBI0_P8/UART0_RX/PWT_IN1/ADC0_SE4, direction: OUTPUT}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 /* clang-format on */
@@ -71,6 +75,13 @@ BOARD_InitPins:
  * END ****************************************************************************************************************/
 void BOARD_InitPins(void)
 {
+
+    gpio_pin_config_t X_FILTER_config = {
+        .pinDirection = kGPIO_DigitalOutput,
+        .outputLogic = 0U
+    };
+    /* Initialize GPIO functionality on pin PTA8 (pin 42) */
+    GPIO_PinInit(BOARD_INITPINS_X_FILTER_GPIO_PORT, BOARD_INITPINS_X_FILTER_PIN, &X_FILTER_config);
 
     gpio_pin_config_t TRIGGER_config = {
         .pinDirection = kGPIO_DigitalOutput,
@@ -92,6 +103,13 @@ void BOARD_InitPins(void)
     };
     /* Initialize GPIO functionality on pin PTA19 (pin 24) */
     GPIO_PinInit(BOARD_INITPINS_Y_INT_RESET_GPIO_PORT, BOARD_INITPINS_Y_INT_RESET_PIN, &Y_INT_RESET_config);
+
+    gpio_pin_config_t Z_BLANK_config = {
+        .pinDirection = kGPIO_DigitalOutput,
+        .outputLogic = 0U
+    };
+    /* Initialize GPIO functionality on pin PTA21 (pin 77) */
+    GPIO_PinInit(BOARD_INITPINS_Z_BLANK_GPIO_PORT, BOARD_INITPINS_Z_BLANK_PIN, &Z_BLANK_config);
 
     gpio_pin_config_t X_INT_HOLD_config = {
         .pinDirection = kGPIO_DigitalOutput,
