@@ -25,6 +25,7 @@ processor: MKE06Z128xxx4
 package_id: MKE06Z128VLK4
 mcu_data: ksdk2_0
 processor_version: 10.0.0
+board: FRDM-KE06Z
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
 /* clang-format on */
 
@@ -66,7 +67,7 @@ outputs:
 - {id: OSCER_clock.outFreq, value: 8 MHz}
 - {id: Plat_clock.outFreq, value: 40 MHz}
 - {id: System_clock.outFreq, value: 40 MHz}
-- {id: Timer_clock.outFreq, value: 20 MHz}
+- {id: Timer_clock.outFreq, value: 40 MHz}
 settings:
 - {id: ICSMode, value: FEE}
 - {id: ICS.BDIV.scale, value: '1', locked: true}
@@ -78,7 +79,6 @@ settings:
 - {id: OSC_CR_RANGE_CFG, value: High}
 - {id: OSC_CR_RANGE_RDIV_CFG, value: High}
 - {id: SIM.DIV2.scale, value: '2'}
-- {id: SIM.DIV3.scale, value: '2', locked: true}
 sources:
 - {id: OSC.OSC.outFreq, value: 8 MHz, enabled: true}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
@@ -98,7 +98,7 @@ const sim_clock_config_t simConfig_BOARD_BootClockRUN =
     {
         .outDiv1 = 0x0U,                          /* DIV1 clock divider: divided by 1 */
         .outDiv2 = 0x1U,                          /* DIV2 clock divider: divided by 2 */
-        .outDiv3 = 0x1U,                          /* DIV3 clock divider: divided by 2 */
+        .outDiv3 = 0x0U,                          /* DIV3 clock divider: divided by 1 */
         .busClkPrescaler = 0x0U,                  /* bus clock optional prescaler */
     };
 const osc_config_t oscConfig_BOARD_BootClockRUN =

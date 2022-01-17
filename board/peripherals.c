@@ -11,9 +11,10 @@ processor: MKE06Z128xxx4
 package_id: MKE06Z128VLK4
 mcu_data: ksdk2_0
 processor_version: 10.0.0
+board: FRDM-KE06Z
 functionalGroups:
 - name: BOARD_InitPeripherals
-  UUID: f2649856-4212-4647-a602-f795d5b467c9
+  UUID: c25122d4-2740-4d50-a160-3c5a4da67c84
   called_from_default_init: true
   selectedCore: core0
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
@@ -21,7 +22,7 @@ functionalGroups:
 /* TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
 component:
 - type: 'system'
-- type_id: 'system_54b53072540eeeb8f8e9343e71f28176'
+- type_id: 'system'
 - global_system_definitions:
   - user_definitions: ''
   - user_includes: ''
@@ -42,61 +43,10 @@ component:
 #include "peripherals.h"
 
 /***********************************************************************************************************************
- * BOARD_InitPeripherals functional group
- **********************************************************************************************************************/
-/***********************************************************************************************************************
- * SPI0 initialization code
- **********************************************************************************************************************/
-/* clang-format off */
-/* TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-instance:
-- name: 'SPI0'
-- type: 'spi'
-- mode: 'SPI_Polling'
-- custom_name_enabled: 'false'
-- type_id: 'spi_672b694426b0a10a1d774659ee8f8435'
-- functional_group: 'BOARD_InitPeripherals'
-- peripheral: 'SPI0'
-- config_sets:
-  - fsl_spi:
-    - spi_mode: 'kSPI_Master'
-    - clockSource: 'BusInterfaceClock'
-    - clockSourceFreq: 'BOARD_BootClockRUN'
-    - spi_master_config:
-      - enableMaster: 'true'
-      - enableStopInWaitMode: 'false'
-      - polarity: 'kSPI_ClockPolarityActiveHigh'
-      - phase: 'kSPI_ClockPhaseFirstEdge'
-      - direction: 'kSPI_MsbFirst'
-      - outputMode: 'kSPI_SlaveSelectAutomaticOutput'
-      - pinMode: 'kSPI_PinModeNormal'
-      - baudRate_Bps: '500000'
-    - quick_selection: 'QS_SPI_1'
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
-/* clang-format on */
-const spi_master_config_t SPI0_config = {
-  .enableMaster = true,
-  .enableStopInWaitMode = false,
-  .polarity = kSPI_ClockPolarityActiveHigh,
-  .phase = kSPI_ClockPhaseFirstEdge,
-  .direction = kSPI_MsbFirst,
-  .outputMode = kSPI_SlaveSelectAutomaticOutput,
-  .pinMode = kSPI_PinModeNormal,
-  .baudRate_Bps = 500000UL
-};
-
-static void SPI0_init(void) {
-  /* Initialization function */
-  SPI_MasterInit(SPI0_PERIPHERAL, &SPI0_config, SPI0_CLK_FREQ);
-}
-
-/***********************************************************************************************************************
  * Initialization functions
  **********************************************************************************************************************/
 void BOARD_InitPeripherals(void)
 {
-  /* Initialize components */
-  SPI0_init();
 }
 
 /***********************************************************************************************************************

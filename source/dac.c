@@ -65,34 +65,6 @@ void nine_microsecond() { // Tuned for Release configuration only!
     }
 }
 
-#define _WR 0x8000 // pin F7 in GPIOB
-
-#define CH_A 0
-#define CH_B 1
-#define CH_C 2
-#define CH_D 3
-
-#if 0
-void setDAC(unsigned channel, uint8_t x) {
-    unsigned portF = channel << 10;
-    GPIOB->PDOR = portF | _WR | LOAD_MASK;  // set up channel address
-    GPIO_PortSet(kGPIO_PORTF, _WR);       // latch address
-    /*
-     * All these pins are on header J2.
-    GPIOA: | D7  6  5  4  3  2  1 D0 | C7  6  5  4  3  2  1 C0 | B7  6  5  4  3  2  1 B0 | A7  6  5  4  3  2  1 A0 |
-    DAC:   | -- -- -- -- -- -- -- -- | -- -- -- -- -- -- D1 -- | -- -- D5 -- D3 D2 -- -- | D7 D6 -- -- -- -- -- D0 |
-    GPIOB: | H7  6  5  4  3  2  1 H0 | G7  6  5  4  3  2  1 G0 | F7  6  5  4  3  2  1 F0 | E7  6  5  4  3  2  1 E0 |
-    DAC:   | -- -- -- -- -- -- -- D4 | -- -- -- -- -- -- -- -- |_WR -- -- -- A1 A0 -- -- | -- -- -- -- -- -- -- -- |
-    */
-    GPIOA->PDOR = (x << 16) | (x << 8) | x; // ports C, B, A
-    GPIOB->PDOR = (x << 20) | portF | LOAD_MASK;        // ports H, F -- hold LOAD high to avoid latching the Yamaha DACs
-    // wait min 45ns  (1 clock is 20.83ns)
-    __asm("NOP");__asm("NOP");__asm("NOP");
-    GPIO_PortClear(kGPIO_PORTF, _WR); // latch data
-    // wait min 10ns
-    __asm("NOP");
-}
-#endif
 
 #define DAC_HALF 0x200 // 2^9, half of full scale 2^10
 #define DAC_ZERO DAC_HALF
@@ -103,7 +75,60 @@ void setDAC(unsigned channel, uint8_t x) {
 // Vout = 1/2 Vdd + 1/4 Vdd (-1 + d*2^-9 + 2^-10) 2^-N
 #define DAC_WORD(e, d) (((e) << 10) | (d))
 
-#define N_POINTS 20         // multiple of 4
+
+
+#define N_POINTS 15
+
+double px[N_POINTS]={
+  0,
+  -2.558,
+  -.953,
+  -31.627,
+  -28.557,
+  -58.59,
+  -50.975,
+  -56.129,
+  -37.608,
+  -34.776,
+  -19.754,
+  -16.425,
+  -22.965,
+  -11.744,
+  0
+};
+
+double py[N_POINTS]={
+  0,
+  -63.282,
+  -30.632,
+  -35.183,
+  -25.058,
+  -.409,
+  3.192,
+  23.773,
+  20.088,
+  29.424,
+  12.848,
+  14.423,
+  47.308,
+  41.31,
+  63.282
+};
+
+uint32_t xcoeff[N_POINTS*2+2];
+uint32_t ycoeff[N_POINTS*2+2];
+uint32_t length[N_POINTS*2+2];
+
+double wrapx(unsigned i) {
+  return i < N_POINTS ? px[i] : -px[N_POINTS + N_POINTS - i - 2];
+}
+double wrapy(unsigned i) {
+  return py[i < N_POINTS ? i : N_POINTS + N_POINTS - i - 2];
+}
+
+
+
+//#define N_POINTS 20         // multiple of 4
 
 void setCoefficients(uint32_t v1, uint32_t v2, unsigned open_reset) {
     for(uint32_t j = 0; j < 14; ++j, v1 >>= 1, v2 >>= 1) {
@@ -157,32 +182,57 @@ uint32_t dac_encode(double coeff) {
     return DAC_WORD(e, (unsigned)(coeff + DAC_ZERO));
 }
 
-int main(void) {
-    gpio_pin_config_t output = { kGPIO_DigitalOutput, 0 };
+#define DAC_A      (0)
+#define DAC_B      (1 << 7)
+#define DAC_GAINX1 (1 << 5)
+#define DAC_ACTIVE (1 << 4)
 
+void spi(unsigned cs, uint16_t valueA, uint16_t valueB) {
+	// Write Command Register for MCP4922 (12-bit DAC)
+	// 15   _A/B : 1 = DAC B,    0 = DAC A
+	// 14   BUF  : 1 = Buffered, 0 = Unbuffered
+	// 13   _GA  : 1 = 1x,       0 = 2x
+	// 12  _SHDN : 1 = Active,   0 = Shutdown selected DAC channel
+	// 11..0     : data
+
+	// Select chip
+	BOARD_INITPINS_NOTCS_DAC_POS_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PIN_MASK;
+
+	// This basically doesn't work; I can't get slave select output to work
+	// plus I don't know how you would sync it to anything else.
+	//SPI_WriteBlocking(SPI_MASTER, buf, sizeof(buf));
+
+	uint32_t word = (0b1011u << 28) | (valueB << 16) | (0b0011u << 12) | valueA ;
+
+	// Bit-bang SPI
+	for (unsigned i = 16; i--;) {
+		if ((word >> i) & 1) {
+			BOARD_INITPINS_SPI_DATAOUT_GPIO->PSOR = BOARD_INITPINS_SPI_DATAOUT_GPIO_PIN_MASK;
+		} else {
+			BOARD_INITPINS_SPI_DATAOUT_GPIO->PCOR = BOARD_INITPINS_SPI_DATAOUT_GPIO_PIN_MASK;
+		}
+		BOARD_INITPINS_SPI_CLOCK_GPIO->PSOR = BOARD_INITPINS_SPI_CLOCK_GPIO_PIN_MASK;
+		BOARD_INITPINS_SPI_CLOCK_GPIO->PCOR = BOARD_INITPINS_SPI_CLOCK_GPIO_PIN_MASK;
+	}
+
+	// Deselect chip (and also latch DAC data when NOT_LDAC is tied low)
+	BOARD_INITPINS_NOTCS_DAC_POS_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PIN_MASK;
+
+	// Note that DAC takes approx 4.5µs to slew 2.5V
+}
+
+int main(void) {
+    /* Init the boards */
     BOARD_InitPins();
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
-/*
-    // TI DAC
+    BOARD_InitLEDsPins();
 
-    GPIO_PinInit(kGPIO_PORTA, 0, &output); // D0
-    GPIO_PinInit(kGPIO_PORTC, 1, &output); // D1
-    GPIO_PinInit(kGPIO_PORTB, 2, &output); // D2
-    GPIO_PinInit(kGPIO_PORTB, 3, &output); // D3
-    GPIO_PinInit(kGPIO_PORTH, 0, &output); // D4
-    GPIO_PinInit(kGPIO_PORTB, 5, &output); // D5
-    GPIO_PinInit(kGPIO_PORTA, 6, &output); // D6
-    GPIO_PinInit(kGPIO_PORTA, 7, &output); // D7
-    GPIO_PinInit(kGPIO_PORTF, 2, &output); // A0
-    GPIO_PinInit(kGPIO_PORTF, 3, &output); // A1
-    GPIO_PinInit(kGPIO_PORTF, 7, &output); // _WR
+    //SPI_MasterGetDefaultConfig(&masterConfig);
+    //SPI_MasterInit(SPI_MASTER, &masterConfig, CLOCK_GetFreq(kCLOCK_BusClk));
 
-    setDAC(CH_A, 0x20);
-    setDAC(CH_B, 0x50);
-    setDAC(CH_C, 0x80);
-    setDAC(CH_D, 0xb0);
-*/
+
+
     uint32_t sintab[N_POINTS], costab[N_POINTS];
     double k = 2*M_PI/N_POINTS;
     for(int i = 0; i < N_POINTS; ++i) {
@@ -217,6 +267,27 @@ int main(void) {
         }
     }
 	#endif
+
+    // Test SPI DAC MCP4922
+
+	//BOARD_INITLEDSPINS_LED_BLUE_GPIO->PCOR = BOARD_INITLEDSPINS_LED_BLUE_GPIO_PIN_MASK;
+	//BOARD_INITLEDSPINS_LED_GREEN_GPIO->PCOR = BOARD_INITLEDSPINS_LED_GREEN_GPIO_PIN_MASK;
+	BOARD_INITLEDSPINS_LED_RED_GPIO->PCOR = BOARD_INITLEDSPINS_LED_RED_GPIO_PIN_MASK;
+    for(;;) {
+		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+
+		spi(0, 0xfffu, 0);
+
+		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+
+		nine_microsecond();
+
+		spi(0, 0x800u, 0);
+		nine_microsecond();
+
+		spi(0, 0, 0);
+		nine_microsecond();
+    }
 
     // Simple step test
     for(;0;) {
@@ -272,14 +343,9 @@ int main(void) {
 
 	// Starburst test
 
-	for(;;) {
+	for(;0;) {
 		for (uint32_t i = 0; i < N_POINTS; ++i) {
             setCoefficients( sintab[i], costab[i], 1 );
-    		__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
-    		__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
-    		__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
-    		__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
-    		__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
 
 		    //delay(10); // Wait reset time
 
@@ -308,6 +374,56 @@ int main(void) {
 			BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
         }
 	}
+
+	// FLAG test
+
+	uint32_t t = 0;
+	  for(unsigned i = 0; i < 2*(N_POINTS-1); ++i) {
+	    double dx = wrapx(i+1) - wrapx(i);
+	    double dy = wrapy(i+1) - wrapy(i);
+	    double d = sqrt(dx*dx + dy*dy);
+	    length[i] = (uint32_t)( d*.7 );
+	    t += length[i];
+	    xcoeff[i] = dac_encode(dx/d);//0x80 + 126*dx/d;
+	    ycoeff[i] = dac_encode(dy/d);//0x80 - 126*dy/d;
+	  }
+
+	  for(unsigned i = 0;;) {
+		  if(i==0){
+			BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+		  }
+	    setCoefficients( xcoeff[i], ycoeff[i], 0 );
+  		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+	    delay(10);
+
+			BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
+			BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
+
+		BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
+		BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
+
+			BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
+
+			// Wait integrating time
+		delay(length[i]);
+
+      		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
+
+		BOARD_INITPINS_X_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch X
+		BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
+
+
+          ++i;
+          if(i == 2*(N_POINTS-1)) {
+
+  			BOARD_INITPINS_X_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+  			BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+
+  			delay(40);
+
+  			i = 0;
+          }
+	  }
 
 
 }

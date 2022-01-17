@@ -6,32 +6,9 @@
 #ifndef _PERIPHERALS_H_
 #define _PERIPHERALS_H_
 
-/***********************************************************************************************************************
- * Included files
- **********************************************************************************************************************/
-#include "fsl_common.h"
-#include "fsl_spi.h"
-
 #if defined(__cplusplus)
 extern "C" {
 #endif /* __cplusplus */
-
-/***********************************************************************************************************************
- * Definitions
- **********************************************************************************************************************/
-/* Definitions for BOARD_InitPeripherals functional group */
-/* BOARD_InitPeripherals defines for SPI0 */
-/* Definition of peripheral ID */
-#define SPI0_PERIPHERAL SPI0
-/* Definition of the clock source */
-#define SPI0_CLOCK_SOURCE SPI0_CLK_SRC
-/* Definition of the clock source frequency */
-#define SPI0_CLK_FREQ 20000000UL
-
-/***********************************************************************************************************************
- * Global variables
- **********************************************************************************************************************/
-extern const spi_master_config_t SPI0_config;
 
 /***********************************************************************************************************************
  * Initialization functions
