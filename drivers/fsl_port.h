@@ -1,34 +1,8 @@
 /*
- * The Clear BSD License
  * Copyright 2017 NXP
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted (subject to the limitations in the disclaimer below) provided
- * that the following conditions are met:
- *
- * o Redistributions of source code must retain the above copyright notice, this list
- *   of conditions and the following disclaimer.
- *
- * o Redistributions in binary form must reproduce the above copyright notice, this
- *   list of conditions and the following disclaimer in the documentation and/or
- *   other materials provided with the distribution.
- *
- * o Neither the name of the copyright holder nor the names of its
- *   contributors may be used to endorse or promote products derived from this
- *   software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 #ifndef _FSL_PORT_H_
 #define _FSL_PORT_H_
@@ -47,7 +21,7 @@
 /*! @name Driver version */
 /*@{*/
 /*! Version 2.0.0. */
-#define FSL_PORT_DRIVER_VERSION (MAKE_VERSION(2, 0, 0))
+#define FSL_PORT_DRIVER_VERSION (MAKE_VERSION(2, 0, 1))
 /*@}*/
 
 #define PORT_MODULEPS_BITWIDTH_OFFSET  (5U) /*　The bit width offset in the module enum type . */
@@ -101,7 +75,7 @@ typedef enum _port_type_t {
     kPORT_PTI = 8U  /*!< PORT PTI. */
 } port_type_t;
 
-/*! @brief Port number */
+/*! @brief Pin number, Notice this index enum has been deprecated and it will be removed in the next release. */
 typedef enum _port_pin_index_t {
     kPORT_PinIdx0 = 0U, /*!< PORT PIN index 0. */
     kPORT_PinIdx1 = 1U, /*!< PORT PIN index 1. */
@@ -355,12 +329,12 @@ static inline void PORT_SetFilterDIV3WidthThreshold(PORT_Type *base, uint8_t thr
  *
  * @param base   PORT peripheral base pointer.
  * @param port   PORT type, such as PTA/PTB/PTC etc, see "port_type_t".
- * @param num    PORT pin number, such as 0, 1, 2, see "port_pin_index_t".
+ * @param num    PORT pin number, such as 0, 1, 2...
  *               For PTI, only PTI0 ~ PTI6 pins are supported. so when set pull
  *               up feature for PTI, please don't set number 7. see reference manual for more details.
  * @param enable  Enable or disable the pull up feature switch.
  */
-void PORT_SetPinPullUpEnable(PORT_Type *base, port_type_t port, port_pin_index_t num, bool enable);
+void PORT_SetPinPullUpEnable(PORT_Type *base, port_type_t port, uint8_t num, bool enable);
 
 /*!
  * @brief Set High drive for port pins.

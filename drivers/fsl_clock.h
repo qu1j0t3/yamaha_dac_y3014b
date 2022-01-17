@@ -1,36 +1,10 @@
 /*
- * The Clear BSD License
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright (c) 2016 - 2017 , NXP
  * All rights reserved.
  *
  *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted (subject to the limitations in the disclaimer below) provided
- * that the following conditions are met:
- *
- * o Redistributions of source code must retain the above copyright notice, this list
- *   of conditions and the following disclaimer.
- *
- * o Redistributions in binary form must reproduce the above copyright notice, this
- *   list of conditions and the following disclaimer in the documentation and/or
- *   other materials provided with the distribution.
- *
- * o Neither the name of copyright holder nor the names of its
- *   contributors may be used to endorse or promote products derived from this
- *   software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef _FSL_CLOCK_H_
@@ -69,7 +43,7 @@
  *
  * When set to 0, peripheral drivers will enable clock in initialize function
  * and disable clock in de-initialize function. When set to 1, peripheral
- * driver will not control the clock, application could contol the clock out of
+ * driver will not control the clock, application could control the clock out of
  * the driver.
  *
  * @note All drivers share this feature switcher. If it is set to 1, application
@@ -85,8 +59,8 @@
 
 /*! @name Driver version */
 /*@{*/
-/*! @brief CLOCK driver version 2.0.1. */
-#define FSL_CLOCK_DRIVER_VERSION (MAKE_VERSION(2, 0, 2))
+/*! @brief CLOCK driver version 2.0.3. */
+#define FSL_CLOCK_DRIVER_VERSION (MAKE_VERSION(2, 0, 3))
 /*@}*/
 
 /*! @brief External XTAL0 (OSC0) clock frequency.
@@ -103,7 +77,7 @@
  * OSC0 using the CLOCK_InitOsc0. All other cores need to call the CLOCK_SetXtal0Freq
  * to get a valid clock frequency.
  */
-extern uint32_t g_xtal0Freq;
+extern volatile uint32_t g_xtal0Freq;
 
 #if (defined(OSC) && !(defined(OSC0)))
 #define OSC0 OSC
@@ -588,8 +562,8 @@ static inline void CLOCK_SetLowPowerEnable(bool enable)
  * This function also sets whether the \c ICSIRCLK is enabled in stop mode.
  *
  * @param enableMode ICSIRCLK enable mode, OR'ed value of @ref _ICS_irclk_enable_mode.
- * @retval kStatus_ICS_SourceUsed Because the internall reference clock is used as a clock source,
- * the confuration should not be changed. Otherwise, a glitch occurs.
+ * @retval kStatus_ICS_SourceUsed Because the internal reference clock is used as a clock source,
+ * the configuration should not be changed. Otherwise, a glitch occurs.
  * @retval kStatus_Success ICSIRCLK configuration finished successfully.
  */
 static inline void CLOCK_SetInternalRefClkConfig(uint8_t enableMode)
@@ -723,7 +697,7 @@ status_t CLOCK_SetFeiMode(uint8_t bDiv);
  * @retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
  * @retval kStatus_Success Switched to the target mode successfully.
  */
-status_t CLOCK_SetFeeMode(uint8_t bDiv, uint8_t frdiv);
+status_t CLOCK_SetFeeMode(uint8_t bDiv, uint8_t rDiv);
 
 /*!
  * @brief Sets the ICS to FBI mode.
@@ -750,7 +724,7 @@ status_t CLOCK_SetFbiMode(uint8_t bDiv);
  * @retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
  * @retval kStatus_Success Switched to the target mode successfully.
  */
-status_t CLOCK_SetFbeMode(uint8_t bDiv, uint8_t rdiv);
+status_t CLOCK_SetFbeMode(uint8_t bDiv, uint8_t rDiv);
 
 /*!
  * @brief Sets the ICS to BILP mode.
@@ -801,13 +775,13 @@ status_t CLOCK_BootToFeiMode(uint8_t bDiv);
  * @retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
  * @retval kStatus_Success Switched to the target mode successfully.
  */
-status_t CLOCK_BootToFeeMode(uint8_t bDiv, uint8_t rdiv);
+status_t CLOCK_BootToFeeMode(uint8_t bDiv, uint8_t rDiv);
 
 /*!
  * @brief Sets the ICS to BILP mode during system boot up.
  *
  * This function sets the ICS to BILP mode from the reset mode. It can also be used to
- * set up the ICS during sytem boot up.
+ * set up the ICS during system boot up.
  *
  * @param   bDiv bus clock divider.
  * @retval kStatus_ICS_SourceUsed Could not change ICSIRCLK setting.
@@ -816,10 +790,10 @@ status_t CLOCK_BootToFeeMode(uint8_t bDiv, uint8_t rdiv);
 status_t CLOCK_BootToBilpMode(uint8_t bDiv);
 
 /*!
- * @brief Sets the ICS to BELP mode during sytem boot up.
+ * @brief Sets the ICS to BELP mode during system boot up.
  *
  * This function sets the ICS to BELP mode from the reset mode. It can also be used to
- * set up the ICS during sytem boot up.
+ * set up the ICS during system boot up.
  *
  * @param   bDiv bus clock divider.
  *

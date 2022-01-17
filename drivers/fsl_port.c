@@ -1,35 +1,9 @@
 /*
- * The Clear BSD License
  * Copyright (c) 2017 , NXP
  * All rights reserved.
  *
  *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted (subject to the limitations in the disclaimer below) provided
- * that the following conditions are met:
- *
- * o Redistributions of source code must retain the above copyright notice, this list
- *   of conditions and the following disclaimer.
- *
- * o Redistributions in binary form must reproduce the above copyright notice, this
- *   list of conditions and the following disclaimer in the documentation and/or
- *   other materials provided with the distribution.
- *
- * o Neither the name of copyright holder nor the names of its
- *   contributors may be used to endorse or promote products derived from this
- *   software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include "fsl_port.h"
@@ -37,6 +11,10 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+/* Component ID definition, used by tools. */
+#ifndef FSL_COMPONENT_ID
+#define FSL_COMPONENT_ID "platform.drivers.port_ke06"
+#endif
 #define PORT_PINNUMS_EACHPORT (8U)   /* PORT pin numbers in each PTA/PTB etc. */
 #define PORT_NUM_EACH_PULLUPREG (4U) /* The port numbers in each pull up register. */
 #define FSL_PORT_FILTER_SELECT_BITMASK  (0x3U) /* The filter selection bit width. */
@@ -52,6 +30,38 @@
  * Code
  ******************************************************************************/
 
+/*!
+ * brief Selects pin for modules.
+ *
+ * This API is used to select the port pin for the module with multiple port pin
+ * selection. For example the FTM Channel 0 can be mapped to ether PTA0 or PTB2.
+ * Select FTM channel 0 map to PTA0 port pin as:
+ * code
+ * PORT_SetPinSelect(kPORT_FTM0CH0, kPORT_FTM0_CH0_PTA0);
+ * endcode
+ *  
+ * Note： This API doesn't support to select specified ALT for a given port pin. 
+ * The ALT feature is automatically selected by hardware according to the 
+ * ALT priority:
+ *     Low -----> high: 
+ *     Alt1, Alt2, …
+ * when peripheral modules has been enabled.
+ *
+ * If you want to select a specified ALT for a given port pin, please add two more
+ * steps after calling PORT_SetPinSelect:
+ * 1. Enable module or the port control in the module for the ALT you want to select.
+ *   For I2C ALT feature:all port enable is controlled by the module enable, so 
+ *   set IICEN in I2CX_C1 to enable the port pins for I2C feature.
+ *   For KBI ALT feature:each port pin is controlled independently by each bit in KBIx_PE.
+ *   set related bit in this register to enable the KBI feature in the port pin.          
+ * 2. Make sure there is no module enabled with higher priority than the ALT module feature
+ *  you want to select. 
+ *
+ * param module   Modules for pin selection.
+ *        For NMI/RST module are write-once attribute after reset.
+ * param pin   Port pin selection for modules.
+ *
+ */
 void PORT_SetPinSelect(port_module_t module, port_pin_select_t pin)
 {
     uint32_t pinSelReg;
@@ -77,6 +87,13 @@ void PORT_SetPinSelect(port_module_t module, port_pin_select_t pin)
     }
 }
 
+/*!
+ * brief Selects the glitch filter for input pins.
+ *
+ * param base   PORT peripheral base pointer.
+ * param port   PORT pin, see "port_filter_pin_t".
+ * param filter  Filter select, see "port_filter_select_t".
+ */
 void PORT_SetFilterSelect(PORT_Type *base, port_filter_pin_t port, port_filter_select_t filter)
 {
     uint32_t fltReg;
@@ -99,7 +116,17 @@ void PORT_SetFilterSelect(PORT_Type *base, port_filter_pin_t port, port_filter_s
 
 }
 
-void PORT_SetPinPullUpEnable(PORT_Type *base, port_type_t port, port_pin_index_t num, bool enable)
+/*!
+ * brief Enables or disables the port pull up.
+ *
+ * param base   PORT peripheral base pointer.
+ * param port   PORT type, such as PTA/PTB/PTC etc, see "port_type_t".
+ * param num    PORT pin number, such as 0, 1, 2...
+ *               For PTI, only PTI0 ~ PTI6 pins are supported. so when set pull
+ *               up feature for PTI, please don't set number 7. see reference manual for more details.
+ * param enable  Enable or disable the pull up feature switch.
+ */
+void PORT_SetPinPullUpEnable(PORT_Type *base, port_type_t port, uint8_t num, bool enable)
 {
     if (enable)
     {

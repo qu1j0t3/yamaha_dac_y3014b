@@ -1,36 +1,10 @@
 /*
- * The Clear BSD License
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright (c) 2016 - 2017 , NXP
  * All rights reserved.
  *
  *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted (subject to the limitations in the disclaimer below) provided
- * that the following conditions are met:
- *
- * o Redistributions of source code must retain the above copyright notice, this list
- *   of conditions and the following disclaimer.
- *
- * o Redistributions in binary form must reproduce the above copyright notice, this
- *   list of conditions and the following disclaimer in the documentation and/or
- *   other materials provided with the distribution.
- *
- * o Neither the name of copyright holder nor the names of its
- *   contributors may be used to endorse or promote products derived from this
- *   software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include "fsl_clock.h"
@@ -38,6 +12,10 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+/* Component ID definition, used by tools. */
+#ifndef FSL_COMPONENT_ID
+#define FSL_COMPONENT_ID "platform.drivers.clock"
+#endif
 
 #define ICS_C2_BDIV_VAL ((ICS->C2 & ICS_C2_BDIV_MASK) >> ICS_C2_BDIV_SHIFT)
 #define ICS_S_CLKST_VAL ((ICS->S & ICS_S_CLKST_MASK) >> ICS_S_CLKST_SHIFT)
@@ -70,7 +48,7 @@ enum _ics_clkout_stat
 static uint32_t s_slowIrcFreq = 37500U;
 
 /* External XTAL0 (OSC0) clock frequency. */
-uint32_t g_xtal0Freq;
+volatile uint32_t g_xtal0Freq;
 
 /*******************************************************************************
  * Prototypes
@@ -190,6 +168,8 @@ static uint32_t CLOCK_GetFllRefClkFreq(void)
 
 static uint8_t CLOCK_GetOscRangeFromFreq(uint32_t freq)
 {
+    assert((freq <= 32768U) || (freq >= 4000000U));
+    
     uint8_t range = 0U;
 
     if (freq <= 32768U)
@@ -197,7 +177,7 @@ static uint8_t CLOCK_GetOscRangeFromFreq(uint32_t freq)
         range = 0U;
     }
     /* high freq range 4M-24M */
-    else if (freq <= 24000000U)
+    else
     {
         range = 1U;
     }
@@ -205,6 +185,11 @@ static uint8_t CLOCK_GetOscRangeFromFreq(uint32_t freq)
     return range;
 }
 
+/*!
+ * brief Get the OSC0 external reference clock frequency (OSC0ERCLK).
+ *
+ * return Clock frequency in Hz.
+ */
 uint32_t CLOCK_GetOsc0ErClkFreq(void)
 {
     if (OSC0->CR & OSC_CR_OSCEN_MASK)
@@ -219,6 +204,11 @@ uint32_t CLOCK_GetOsc0ErClkFreq(void)
     }
 }
 
+/*!
+ * brief Get the flash clock frequency.
+ *
+ * return Clock frequency in Hz.
+ */
 uint32_t CLOCK_GetFlashClkFreq(void)
 {
     uint32_t freq;
@@ -229,21 +219,49 @@ uint32_t CLOCK_GetFlashClkFreq(void)
     return freq;
 }
 
+/*!
+ * brief Get the bus clock frequency.
+ *
+ * return Clock frequency in Hz.
+ */
 uint32_t CLOCK_GetBusClkFreq(void)
 {
     return CLOCK_GetFlashClkFreq();
 }
 
+/*!
+ * brief Get the core clock or system clock frequency.
+ *
+ * return Clock frequency in Hz.
+ */
 uint32_t CLOCK_GetCoreSysClkFreq(void)
 {
     return CLOCK_GetICSOutClkFreq() / (SIM_CLKDIV_OUTDIV1_VAL + 1);
 }
 
+/*!
+ * brief Gets the Timer(FTM/PWT) clock frequency.
+ *
+ * This function gets the Timer clock frequency in Hz based
+ * on the current ICSOUTCLK.
+ *
+ * return The frequency of Timer(FTM/PWT) clock.
+ */
 uint32_t CLOCK_GetTimerClkFreq(void)
 {
     return CLOCK_GetICSOutClkFreq() / (SIM_CLKDIV_OUTDIV3_VAL + 1);
 }
 
+/*!
+ * brief Gets the clock frequency for a specific clock name.
+ *
+ * This function checks the current clock configurations and then calculates
+ * the clock frequency for a specific clock name defined in clock_name_t.
+ * The ICS must be properly configured before using this function.
+ *
+ * param clockName Clock names defined in clock_name_t
+ * return Clock frequency value in Hertz
+ */
 uint32_t CLOCK_GetFreq(clock_name_t clockName)
 {
     uint32_t freq;
@@ -292,6 +310,13 @@ uint32_t CLOCK_GetFreq(clock_name_t clockName)
     return freq;
 }
 
+/*!
+ * brief Set the clock configure in SIM module.
+ *
+ * This function sets system layer clock settings in SIM module.
+ *
+ * param config Pointer to the configure structure.
+ */
 void CLOCK_SetSimConfig(sim_clock_config_t const *config)
 {
     /* config divider */
@@ -300,6 +325,14 @@ void CLOCK_SetSimConfig(sim_clock_config_t const *config)
     SIM->SOPT0 |= SIM_SOPT0_BUSREF(config->busClkPrescaler);
 }
 
+/*!
+ * brief Gets the ICS output clock (ICSOUTCLK) frequency.
+ *
+ * This function gets the ICS output clock frequency in Hz based on the current ICS
+ * register value.
+ *
+ * return The frequency of ICSOUTCLK.
+ */
 uint32_t CLOCK_GetICSOutClkFreq(void)
 {
     uint32_t icsoutclk;
@@ -324,6 +357,15 @@ uint32_t CLOCK_GetICSOutClkFreq(void)
     return (icsoutclk / (1 << ICS_C2_BDIV_VAL));
 }
 
+/*!
+ * brief Gets the ICS FLL clock (ICSFLLCLK) frequency.
+ *
+ * This function gets the ICS FLL clock frequency in Hz based on the current ICS
+ * register value. The FLL is enabled in FEI/FBI/FEE/FBE mode and
+ * disabled in low power state in other modes.
+ *
+ * return The frequency of ICSFLLCLK.
+ */
 uint32_t CLOCK_GetFllFreq(void)
 {
     /* If FLL is not enabled currently, then return 0U. */
@@ -336,6 +378,14 @@ uint32_t CLOCK_GetFllFreq(void)
     return CLOCK_GetFllRefClkFreq() * ICS_FLL_CLOCK_FACTOR;
 }
 
+/*!
+ * brief Gets the ICS internal reference clock (ICSIRCLK) frequency.
+ *
+ * This function gets the ICS internal reference clock frequency in Hz based
+ * on the current ICS register value.
+ *
+ * return The frequency of ICSIRCLK.
+ */
 uint32_t CLOCK_GetInternalRefClkFreq(void)
 {
     /* If ICSIRCLK is gated. */
@@ -347,6 +397,14 @@ uint32_t CLOCK_GetInternalRefClkFreq(void)
     return s_slowIrcFreq;
 }
 
+/*!
+ * brief Gets the ICS fixed frequency clock (ICSFFCLK) frequency.
+ *
+ * This function gets the ICS fixed frequency clock frequency in Hz based
+ * on the current ICS register value.
+ *
+ * return The frequency of ICSFFCLK.
+ */
 uint32_t CLOCK_GetICSFixedFreqClkFreq(void)
 {
     uint32_t freq = CLOCK_GetFllRefClkFreq();
@@ -362,6 +420,13 @@ uint32_t CLOCK_GetICSFixedFreqClkFreq(void)
     }
 }
 
+/*!
+ * brief Initializes the OSC0.
+ *
+ * This function initializes the OSC0 according to the board configuration.
+ *
+ * param  config Pointer to the OSC0 configuration structure.
+ */
 void CLOCK_InitOsc0(osc_config_t const *config)
 {
     uint8_t range = CLOCK_GetOscRangeFromFreq(config->freq);
@@ -378,11 +443,23 @@ void CLOCK_InitOsc0(osc_config_t const *config)
     }
 }
 
+/*!
+ * brief Deinitializes the OSC0.
+ *
+ * This function deinitializes the OSC0.
+ */
 void CLOCK_DeinitOsc0(void)
 {
     OSC0->CR = 0U;
 }
 
+/*!
+ * brief Gets the current ICS mode.
+ *
+ * This function checks the ICS registers and determines the current ICS mode.
+ *
+ * return Current ICS mode or error code; See ref ics_mode_t.
+ */
 ics_mode_t CLOCK_GetMode(void)
 {
     ics_mode_t mode = kICS_ModeError;
@@ -456,6 +533,16 @@ ics_mode_t CLOCK_GetMode(void)
     return mode;
 }
 
+/*!
+ * brief Sets the ICS to FEI mode.
+ *
+ * This function sets the ICS to FEI mode. If setting to FEI mode fails
+ * from the current mode, this function returns an error.
+ *
+ * param       bDiv bus clock divider
+ * retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_SetFeiMode(uint8_t bDiv)
 {
 #if (defined(ICS_CONFIG_CHECK_PARAM) && ICS_CONFIG_CHECK_PARAM)
@@ -489,7 +576,7 @@ status_t CLOCK_SetFeiMode(uint8_t bDiv)
 
     /* wait for FLL to lock */
     while (!(ICS->S & ICS_S_LOCK_MASK))
-        ;
+    {}
 
     /* clear Loss of lock sticky bit */
     ICS->S |= ICS_S_LOLS_MASK;
@@ -497,6 +584,18 @@ status_t CLOCK_SetFeiMode(uint8_t bDiv)
     return kStatus_Success;
 }
 
+/*!
+ * brief Sets the ICS to FEE mode.
+ *
+ * This function sets the ICS to FEE mode. If setting to FEE mode fails
+ * from the current mode, this function returns an error.
+ *
+ * param   bDiv bus clock divider
+ * param   rdiv  FLL reference clock divider setting, RDIV.
+ *
+ * retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_SetFeeMode(uint8_t bDiv, uint8_t rDiv)
 {
 #if (defined(ICS_CONFIG_CHECK_PARAM) && ICS_CONFIG_CHECK_PARAM)
@@ -536,7 +635,7 @@ status_t CLOCK_SetFeeMode(uint8_t bDiv, uint8_t rDiv)
 
     /* wait for FLL to lock */
     while (!(ICS->S & ICS_S_LOCK_MASK))
-        ;
+    {}
 
     /* clear Loss of lock sticky bit */
     ICS->S |= ICS_S_LOLS_MASK;
@@ -544,6 +643,17 @@ status_t CLOCK_SetFeeMode(uint8_t bDiv, uint8_t rDiv)
     return kStatus_Success;
 }
 
+/*!
+ * brief Sets the ICS to FBI mode.
+ *
+ * This function sets the ICS to FBI mode. If setting to FBI mode fails
+ * from the current mode, this function returns an error.
+ *
+ * param bDiv bus clock divider
+
+ * retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_SetFbiMode(uint8_t bDiv)
 {
 #if (defined(ICS_CONFIG_CHECK_PARAM) && ICS_CONFIG_CHECK_PARAM)
@@ -579,6 +689,18 @@ status_t CLOCK_SetFbiMode(uint8_t bDiv)
     return kStatus_Success;
 }
 
+/*!
+ * brief Sets the ICS to FBE mode.
+ *
+ * This function sets the ICS to FBE mode. If setting to FBE mode fails
+ * from the current mode, this function returns an error.
+ *
+ * param   bDiv bus clock divider
+ * param   rdiv  FLL reference clock divider setting, RDIV.
+ *
+ * retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_SetFbeMode(uint8_t bDiv, uint8_t rDiv)
 {
 #if (defined(ICS_CONFIG_CHECK_PARAM) && ICS_CONFIG_CHECK_PARAM)
@@ -625,6 +747,16 @@ status_t CLOCK_SetFbeMode(uint8_t bDiv, uint8_t rDiv)
     return kStatus_Success;
 }
 
+/*!
+ * brief Sets the ICS to BILP mode.
+ *
+ * This function sets the ICS to BILP mode. If setting to BILP mode fails
+ * from the current mode, this function returns an error.
+ *
+ * param   bDiv bus clock divider
+ * retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_SetBilpMode(uint8_t bDiv)
 {
 #if (defined(ICS_CONFIG_CHECK_PARAM) && ICS_CONFIG_CHECK_PARAM)
@@ -640,6 +772,16 @@ status_t CLOCK_SetBilpMode(uint8_t bDiv)
     return kStatus_Success;
 }
 
+/*!
+ * brief Sets the ICS to BELP mode.
+ *
+ * This function sets the ICS to BELP mode. If setting to BELP mode fails
+ * from the current mode, this function returns an error.
+ *
+ * param   bDiv bus clock divider
+ * retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_SetBelpMode(uint8_t bDiv)
 {
 #if (defined(ICS_CONFIG_CHECK_PARAM) && ICS_CONFIG_CHECK_PARAM)
@@ -655,16 +797,49 @@ status_t CLOCK_SetBelpMode(uint8_t bDiv)
     return kStatus_Success;
 }
 
+/*!
+ * brief Sets the ICS to FEI mode during system boot up.
+ *
+ * This function sets the ICS to FEI mode from the reset mode. It can also be used to
+ * set up ICS during system boot up.
+ *
+ * param  bDiv bus clock divider.
+ *
+ * retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_BootToFeiMode(uint8_t bDiv)
 {
     return CLOCK_SetFeiMode(bDiv);
 }
 
+/*!
+ * brief Sets the ICS to FEE mode during system bootup.
+ *
+ * This function sets ICS to FEE mode from the reset mode. It can also be used to
+ * set up the ICS during system boot up.
+ *
+ * param   bDiv bus clock divider.
+ * param   rdiv  FLL reference clock divider setting, RDIV.
+ *
+ * retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_BootToFeeMode(uint8_t bDiv, uint8_t rDiv)
 {
     return CLOCK_SetFeeMode(bDiv, rDiv);
 }
 
+/*!
+ * brief Sets the ICS to BILP mode during system boot up.
+ *
+ * This function sets the ICS to BILP mode from the reset mode. It can also be used to
+ * set up the ICS during system boot up.
+ *
+ * param   bDiv bus clock divider.
+ * retval kStatus_ICS_SourceUsed Could not change ICSIRCLK setting.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_BootToBilpMode(uint8_t bDiv)
 {
     /* If reset mode is not BILP, first enter FBI mode. */
@@ -679,6 +854,17 @@ status_t CLOCK_BootToBilpMode(uint8_t bDiv)
     return kStatus_Success;
 }
 
+/*!
+ * brief Sets the ICS to BELP mode during system boot up.
+ *
+ * This function sets the ICS to BELP mode from the reset mode. It can also be used to
+ * set up the ICS during system boot up.
+ *
+ * param   bDiv bus clock divider.
+ *
+ * retval kStatus_ICS_ModeUnreachable Could not switch to the target mode.
+ * retval kStatus_Success Switched to the target mode successfully.
+ */
 status_t CLOCK_BootToBelpMode(uint8_t bDiv)
 {
     /* Set to FBE mode. */
@@ -725,6 +911,20 @@ static const ics_mode_t ICSModeMatrix[6][6] = {
     /*      FEI           FBI           BILP          FEE           FBE           BELP      */
 };
 
+/*!
+ * brief Sets the ICS to a target mode.
+ *
+ * This function sets ICS to a target mode defined by the configuration
+ * structure. If switching to the target mode fails, this function
+ * chooses the correct path.
+ *
+ * param  config Pointer to the target ICS mode configuration structure.
+ * return Return kStatus_Success if switched successfully; Otherwise, it returns an error code #_ICS_status.
+ *
+ * note If the external clock is used in the target mode, ensure that it is
+ * enabled. For example, if the OSC0 is used, set up OSC0 correctly before calling this
+ * function.
+ */
 status_t CLOCK_SetIcsConfig(const ics_config_t *config)
 {
     ics_mode_t next_mode;
