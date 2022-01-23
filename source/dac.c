@@ -128,41 +128,36 @@ double wrapy(unsigned i) {
 
 
 
-//#define N_POINTS 20         // multiple of 4
+#define SINCOS_POINTS 20         // multiple of 4
 
-void setCoefficients(uint32_t v1, uint32_t v2, unsigned open_reset) {
+void setCoefficients(uint32_t v1, uint32_t v2) {
     for(uint32_t j = 0; j < 14; ++j, v1 >>= 1, v2 >>= 1) {
     	// j = 0..9  D0..D9   mantissa
     	// j = 10..12                S0..S2   exponent
     	// j = 13 "extra" bit not clearly discussed in the datasheet but seems to be required for LOAD timing
 
-    	BOARD_INITPINS_DAC_CLOCK_FGPIO->PCOR = BOARD_INITPINS_DAC_CLOCK_GPIO_PIN_MASK;
+    	BOARD_INITPINS_DAC_CLOCK_GPIO->PCOR = BOARD_INITPINS_DAC_CLOCK_GPIO_PIN_MASK;
 
     	if (v1 & 1) {
-    		BOARD_INITPINS_DAC_SD_X_COEFF_FGPIO->PSOR = BOARD_INITPINS_DAC_SD_X_COEFF_GPIO_PIN_MASK;
+    		BOARD_INITPINS_DAC_SD_X_COEFF_GPIO->PSOR = BOARD_INITPINS_DAC_SD_X_COEFF_GPIO_PIN_MASK;
     	} else {
-    		BOARD_INITPINS_DAC_SD_X_COEFF_FGPIO->PCOR = BOARD_INITPINS_DAC_SD_X_COEFF_GPIO_PIN_MASK;
+    		BOARD_INITPINS_DAC_SD_X_COEFF_GPIO->PCOR = BOARD_INITPINS_DAC_SD_X_COEFF_GPIO_PIN_MASK;
     	}
 
     	if (v2 & 1) {
-    		BOARD_INITPINS_DAC_SD_Y_COEFF_FGPIO->PSOR = BOARD_INITPINS_DAC_SD_Y_COEFF_GPIO_PIN_MASK;
+    		BOARD_INITPINS_DAC_SD_Y_COEFF_GPIO->PSOR = BOARD_INITPINS_DAC_SD_Y_COEFF_GPIO_PIN_MASK;
     	} else {
-    		BOARD_INITPINS_DAC_SD_Y_COEFF_FGPIO->PCOR = BOARD_INITPINS_DAC_SD_Y_COEFF_GPIO_PIN_MASK;
+    		BOARD_INITPINS_DAC_SD_Y_COEFF_GPIO->PCOR = BOARD_INITPINS_DAC_SD_Y_COEFF_GPIO_PIN_MASK;
     	}
-
     	if (j == 5) {
-    		if (open_reset) {
-				BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-				BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-    		}
-    		BOARD_INITPINS_DAC_LOAD_FGPIO->PSOR = BOARD_INITPINS_DAC_LOAD_GPIO_PIN_MASK;
+    		BOARD_INITPINS_DAC_LOAD_GPIO->PSOR = BOARD_INITPINS_DAC_LOAD_GPIO_PIN_MASK;
     	} else if (j == 13){
-    		BOARD_INITPINS_DAC_LOAD_FGPIO->PCOR = BOARD_INITPINS_DAC_LOAD_GPIO_PIN_MASK;
+    		BOARD_INITPINS_DAC_LOAD_GPIO->PCOR = BOARD_INITPINS_DAC_LOAD_GPIO_PIN_MASK;
     	}
 
     	// This is the tDS Data Setup period -- min 100ns per datasheet. Actually looks approx 600ns in Debug build
 
-    	BOARD_INITPINS_DAC_CLOCK_FGPIO->PSOR = BOARD_INITPINS_DAC_CLOCK_GPIO_PIN_MASK;
+    	BOARD_INITPINS_DAC_CLOCK_GPIO->PSOR = BOARD_INITPINS_DAC_CLOCK_GPIO_PIN_MASK;
         // Min clock high time 100ns per datasheet. Actually Clock remains high for just over 300ns
     }
 }
@@ -231,16 +226,10 @@ int main(void) {
     BOARD_InitPins();
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
-    BOARD_InitLEDsPins();
 
-    //SPI_MasterGetDefaultConfig(&masterConfig);
-    //SPI_MasterInit(SPI_MASTER, &masterConfig, CLOCK_GetFreq(kCLOCK_BusClk));
-
-
-
-    uint32_t sintab[N_POINTS], costab[N_POINTS];
-    double k = 2*M_PI/N_POINTS;
-    for(int i = 0; i < N_POINTS; ++i) {
+    uint32_t sintab[SINCOS_POINTS], costab[SINCOS_POINTS];
+    double k = 2*M_PI/SINCOS_POINTS;
+    for(int i = 0; i < SINCOS_POINTS; ++i) {
         sintab[i] = dac_encode(sin(i*k));
         costab[i] = dac_encode(cos(i*k));
     }
@@ -275,10 +264,7 @@ int main(void) {
 
     // Test SPI DAC MCP4922
 
-	//BOARD_INITLEDSPINS_LED_BLUE_GPIO->PCOR = BOARD_INITLEDSPINS_LED_BLUE_GPIO_PIN_MASK;
-	//BOARD_INITLEDSPINS_LED_GREEN_GPIO->PCOR = BOARD_INITLEDSPINS_LED_GREEN_GPIO_PIN_MASK;
-	BOARD_INITLEDSPINS_LED_RED_GPIO->PCOR = BOARD_INITLEDSPINS_LED_RED_GPIO_PIN_MASK;
-    for(;;) {
+    for(;0;) {
 		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
 		spi(0, DAC_A, 0xfffu);
@@ -308,15 +294,15 @@ int main(void) {
     // Simple step test
     for(;0;) {
 		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
-		setCoefficients( DAC_WORD(7, 0), DAC_WORD(0, DAC_ZERO), 0 );
+		setCoefficients( DAC_WORD(7, 0), DAC_WORD(7, 0) );
 		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 		nine_microsecond(); // settling time
 
-		setCoefficients( DAC_WORD(7, 512), DAC_WORD(0, DAC_ZERO), 0 );
+		setCoefficients( DAC_WORD(7, 512), DAC_WORD(7, 512) );
 		nine_microsecond(); // settling time
 
 	    // Set DAC to most negative
-		setCoefficients( DAC_WORD(7, 1023), DAC_WORD(0, DAC_ZERO), 0 );
+		setCoefficients( DAC_WORD(7, 1023), DAC_WORD(7, 1023) );
 		nine_microsecond(); // settling time
     }
 
@@ -325,7 +311,7 @@ int main(void) {
 
 
 	for(;0;) {
-		setCoefficients( DAC_WORD(7, 1023), DAC_WORD(7, 0), 0 );
+		setCoefficients( DAC_WORD(7, 1023), DAC_WORD(7, 0) );
 
 
 		BOARD_INITPINS_X_INT_RESET_GPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
@@ -359,11 +345,11 @@ int main(void) {
 
 	// Starburst test
 
-	for(;0;) {
-		for (uint32_t i = 0; i < N_POINTS; ++i) {
-            setCoefficients( sintab[i], costab[i], 1 );
+	for(;1;) {
+		for (uint32_t i = 0; i < SINCOS_POINTS; ++i) {
+            setCoefficients( sintab[i], costab[i] );
 
-		    //delay(10); // Wait reset time
+		    delay(160); // Wait reset time
 
 			BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 			BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
@@ -372,14 +358,18 @@ int main(void) {
     		BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
     		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
-    		BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+    		if(!i) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
 			// Wait integrating time
     		nine_microsecond();
     		nine_microsecond();
+    		nine_microsecond();
+    		nine_microsecond();
+    		nine_microsecond();
+    		nine_microsecond();
 
     		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
-    		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+    		if(!i) BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
 
 		    BOARD_INITPINS_X_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch X
@@ -408,7 +398,7 @@ int main(void) {
 		  if(i==0){
 			BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 		  }
-	    setCoefficients( xcoeff[i], ycoeff[i], 0 );
+	    setCoefficients( xcoeff[i], ycoeff[i] );
   		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 	    delay(10);
 
