@@ -182,12 +182,10 @@ uint32_t dac_encode(double coeff) {
     return DAC_WORD(e, (unsigned)(coeff + DAC_ZERO));
 }
 
-#define DAC_A      (0)
-#define DAC_B      (1 << 7)
-#define DAC_GAINX1 (1 << 5)
-#define DAC_ACTIVE (1 << 4)
+#define DAC_A      0
+#define DAC_B      1
 
-void spi(unsigned cs, uint16_t valueA, uint16_t valueB) {
+void spi(unsigned cs, unsigned dac, uint16_t value) {
 	// Write Command Register for MCP4922 (12-bit DAC)
 	// 15   _A/B : 1 = DAC B,    0 = DAC A
 	// 14   BUF  : 1 = Buffered, 0 = Unbuffered
@@ -202,7 +200,7 @@ void spi(unsigned cs, uint16_t valueA, uint16_t valueB) {
 	// plus I don't know how you would sync it to anything else.
 	//SPI_WriteBlocking(SPI_MASTER, buf, sizeof(buf));
 
-	uint32_t word = (0b1011u << 28) | (valueB << 16) | (0b0011u << 12) | valueA ;
+	unsigned word = (dac << 15) | (0b0011u << 12) | value;
 
 	// Bit-bang SPI
 	for (unsigned i = 16; i--;) {
@@ -276,16 +274,21 @@ int main(void) {
     for(;;) {
 		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
-		spi(0, 0xfffu, 0);
+		spi(0, DAC_A, 0xfffu);
+		spi(0, DAC_B, 0xfffu);
 
 		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
 		nine_microsecond();
 
-		spi(0, 0x800u, 0);
+		spi(0, DAC_A, 0x800u);
+		spi(0, DAC_B, 0x800u);
+
 		nine_microsecond();
 
-		spi(0, 0, 0);
+		spi(0, DAC_A, 0);
+		spi(0, DAC_B, 0);
+
 		nine_microsecond();
     }
 
