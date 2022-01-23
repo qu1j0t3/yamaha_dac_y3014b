@@ -220,6 +220,21 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_SPI_DATAOUT_PIN_MASK (1U << 1U)      /*!<@brief PORT pin mask */
                                                             /* @} */
 
+/*! @name PORTA1 (number 61), J1[10]/PTA1_D4_T1/PTA1_IRRX
+  @{ */
+
+/* Symbols to be used with GPIO driver */
+#define BOARD_INITPINS_NOTCS_DAC_LIMIT_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO_PORT kGPIO_PORTA    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO_PIN_MASK (1U << 1U) /*!<@brief GPIO pin mask */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_NOTCS_DAC_LIMIT_PORT PORTA               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_LIMIT_PIN 1U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_NOTCS_DAC_LIMIT_PIN_MASK (1U << 1U)      /*!<@brief PORT pin mask */
+                                                                /* @} */
+
 /*!
  * @brief Configures pin routing and optionally pin electrical features.
  *

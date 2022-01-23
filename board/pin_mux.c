@@ -18,7 +18,7 @@ pin_labels:
 - {pin_num: '41', pin_signal: PTB1/KBI0_P9/UART0_TX/ADC0_SE5, label: 'J1[4]/PTB1_IRTX', identifier: IRTX}
 - {pin_num: '28', pin_signal: PTD5/KBI0_P29/PWT_IN0, label: 'J1[6]'}
 - {pin_num: '2', pin_signal: PTD0/KBI0_P24/FTM2_CH2/SPI1_SCK, label: 'J1[8]/PTD0_D3_PWM2'}
-- {pin_num: '61', pin_signal: PTA1/KBI0_P1/FTM0_CH1/I2C0_4WSDAOUT/ACMP0_IN1/ADC0_SE1, label: 'J1[10]/PTA1_D4_T1/PTA1_IRRX', identifier: IRRX}
+- {pin_num: '61', pin_signal: PTA1/KBI0_P1/FTM0_CH1/I2C0_4WSDAOUT/ACMP0_IN1/ADC0_SE1, label: 'J1[10]/PTA1_D4_T1/PTA1_IRRX', identifier: IRRX;NOTCS_DAC_LIMIT}
 - {pin_num: '1', pin_signal: PTD1/KBI0_P25/FTM2_CH3/SPI1_MOSI, label: 'J1[12]/PTD1_D5_PWM3'}
 - {pin_num: '23', pin_signal: PTB4/KBI0_P12/FTM2_CH4/SPI0_MISO/ACMP1_IN2/NMI_b, label: 'J1[14]/J2[10]/PTB4_D6_PWM4'}
 - {pin_num: '45', pin_signal: PTA7/KBI0_P7/FTM2_FLT2/ACMP1_IN1/ADC0_SE3, label: 'J1[16]/J2[17]/PTA7_D7_ANB1'}
@@ -134,6 +134,7 @@ BOARD_InitPins:
   - {pin_num: '62', peripheral: GPIOA, signal: 'GPIO, 0', pin_signal: PTA0/KBI0_P0/FTM0_CH0/I2C0_4WSCLOUT/ACMP0_IN0/ADC0_SE0, direction: OUTPUT}
   - {pin_num: '76', peripheral: GPIOB, signal: 'GPIO, 0', pin_signal: PTE0/KBI1_P0/SPI0_SCK/TCLK1/I2C1_SDA, direction: OUTPUT}
   - {pin_num: '75', peripheral: GPIOB, signal: 'GPIO, 1', pin_signal: PTE1/KBI1_P1/SPI0_MOSI/I2C1_SCL, direction: OUTPUT}
+  - {pin_num: '61', peripheral: GPIOA, signal: 'GPIO, 1', pin_signal: PTA1/KBI0_P1/FTM0_CH1/I2C0_4WSDAOUT/ACMP0_IN1/ADC0_SE1, identifier: NOTCS_DAC_LIMIT, direction: OUTPUT}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 /* clang-format on */
@@ -153,6 +154,13 @@ void BOARD_InitPins(void)
     };
     /* Initialize GPIO functionality on pin PTA0 (pin 62) */
     GPIO_PinInit(BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PORT, BOARD_INITPINS_NOTCS_DAC_POS_PIN, &NOTCS_DAC_POS_config);
+
+    gpio_pin_config_t NOTCS_DAC_LIMIT_config = {
+        .pinDirection = kGPIO_DigitalOutput,
+        .outputLogic = 0U
+    };
+    /* Initialize GPIO functionality on pin PTA1 (pin 61) */
+    GPIO_PinInit(BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO_PORT, BOARD_INITPINS_NOTCS_DAC_LIMIT_PIN, &NOTCS_DAC_LIMIT_config);
 
     gpio_pin_config_t TRIGGER_config = {
         .pinDirection = kGPIO_DigitalOutput,
@@ -400,7 +408,7 @@ BOARD_InitINFRAREDPins:
 - options: {coreID: core0, enableClock: 'true'}
 - pin_list:
   - {pin_num: '41', peripheral: GPIOA, signal: 'GPIO, 9', pin_signal: PTB1/KBI0_P9/UART0_TX/ADC0_SE5}
-  - {pin_num: '61', peripheral: GPIOA, signal: 'GPIO, 1', pin_signal: PTA1/KBI0_P1/FTM0_CH1/I2C0_4WSDAOUT/ACMP0_IN1/ADC0_SE1}
+  - {pin_num: '61', peripheral: GPIOA, signal: 'GPIO, 1', pin_signal: PTA1/KBI0_P1/FTM0_CH1/I2C0_4WSDAOUT/ACMP0_IN1/ADC0_SE1, identifier: IRRX}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 /* clang-format on */

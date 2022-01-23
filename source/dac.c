@@ -194,11 +194,11 @@ void spi(unsigned cs, unsigned dac, uint16_t value) {
 	// 11..0     : data
 
 	// Select chip
-	BOARD_INITPINS_NOTCS_DAC_POS_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PIN_MASK;
-
-	// This basically doesn't work; I can't get slave select output to work
-	// plus I don't know how you would sync it to anything else.
-	//SPI_WriteBlocking(SPI_MASTER, buf, sizeof(buf));
+	if (cs) {
+		BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO_PIN_MASK;
+	} else {
+		BOARD_INITPINS_NOTCS_DAC_POS_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PIN_MASK;
+	}
 
 	unsigned word = (dac << 15) | (0b0011u << 12) | value;
 
@@ -214,7 +214,14 @@ void spi(unsigned cs, unsigned dac, uint16_t value) {
 	}
 
 	// Deselect chip (and also latch DAC data when NOT_LDAC is tied low)
-	BOARD_INITPINS_NOTCS_DAC_POS_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PIN_MASK;
+	if (cs) {
+		BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO_PIN_MASK;
+	} else {
+		BOARD_INITPINS_NOTCS_DAC_POS_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PIN_MASK;
+	}
+
+	// Without this delay, making an immediate next call to set unit B will fail (DAC won't latch)
+	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
 
 	// Note that DAC takes approx 4.5µs to slew 2.5V
 }
@@ -276,6 +283,8 @@ int main(void) {
 
 		spi(0, DAC_A, 0xfffu);
 		spi(0, DAC_B, 0xfffu);
+		spi(1, DAC_A, 0xfffu);
+		spi(1, DAC_B, 0xfffu);
 
 		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
@@ -283,11 +292,15 @@ int main(void) {
 
 		spi(0, DAC_A, 0x800u);
 		spi(0, DAC_B, 0x800u);
+		spi(1, DAC_A, 0x800u);
+		spi(1, DAC_B, 0x800u);
 
 		nine_microsecond();
 
 		spi(0, DAC_A, 0);
 		spi(0, DAC_B, 0);
+		spi(1, DAC_A, 0);
+		spi(1, DAC_B, 0);
 
 		nine_microsecond();
     }
