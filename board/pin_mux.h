@@ -179,16 +179,16 @@ void BOARD_InitBootPins(void);
   @{ */
 
 /* Symbols to be used with GPIO driver */
-#define BOARD_INITPINS_NOTCS_DAC_POS_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
-#define BOARD_INITPINS_NOTCS_DAC_POS_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
-#define BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PORT kGPIO_PORTA    /*!<@brief PORTA GPIO port: PORTA */
-#define BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PIN_MASK (1U << 0U) /*!<@brief GPIO pin mask */
+#define BOARD_INITPINS_NOTCS_DAC_0_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_0_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_0_GPIO_PORT kGPIO_PORTA    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK (1U << 0U) /*!<@brief GPIO pin mask */
 
 /* Symbols to be used with PORT driver */
-#define BOARD_INITPINS_NOTCS_DAC_POS_PORT PORTA               /*!<@brief PORT peripheral base pointer */
-#define BOARD_INITPINS_NOTCS_DAC_POS_PIN 0U                   /*!<@brief PORT pin number */
-#define BOARD_INITPINS_NOTCS_DAC_POS_PIN_MASK (1U << 0U)      /*!<@brief PORT pin mask */
-                                                              /* @} */
+#define BOARD_INITPINS_NOTCS_DAC_0_PORT PORTA               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_0_PIN 0U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_NOTCS_DAC_0_PIN_MASK (1U << 0U)      /*!<@brief PORT pin mask */
+                                                            /* @} */
 
 /*! @name PORTE0 (number 76), J4[1]/PTE0_SPI0_SCK
   @{ */
@@ -224,16 +224,16 @@ void BOARD_InitBootPins(void);
   @{ */
 
 /* Symbols to be used with GPIO driver */
-#define BOARD_INITPINS_NOTCS_DAC_LIMIT_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
-#define BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
-#define BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO_PORT kGPIO_PORTA    /*!<@brief PORTA GPIO port: PORTA */
-#define BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO_PIN_MASK (1U << 1U) /*!<@brief GPIO pin mask */
+#define BOARD_INITPINS_NOTCS_DAC_1_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_1_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_1_GPIO_PORT kGPIO_PORTA    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK (1U << 1U) /*!<@brief GPIO pin mask */
 
 /* Symbols to be used with PORT driver */
-#define BOARD_INITPINS_NOTCS_DAC_LIMIT_PORT PORTA               /*!<@brief PORT peripheral base pointer */
-#define BOARD_INITPINS_NOTCS_DAC_LIMIT_PIN 1U                   /*!<@brief PORT pin number */
-#define BOARD_INITPINS_NOTCS_DAC_LIMIT_PIN_MASK (1U << 1U)      /*!<@brief PORT pin mask */
-                                                                /* @} */
+#define BOARD_INITPINS_NOTCS_DAC_1_PORT PORTA               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_1_PIN 1U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_NOTCS_DAC_1_PIN_MASK (1U << 1U)      /*!<@brief PORT pin mask */
+                                                            /* @} */
 
 /*!
  * @brief Configures pin routing and optionally pin electrical features.

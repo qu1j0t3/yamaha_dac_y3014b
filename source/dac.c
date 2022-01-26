@@ -59,7 +59,7 @@ void delay(unsigned j) {
     }
 }
 
-void nine_microsecond() { // Tuned for Release configuration only!
+void four_microseconds() { // Tuned for Release configuration only!
     for (uint32_t i = 0; i < 30; ++i) { //  500 => ~163µs
         __asm("NOP"); /* delay */
     }
@@ -128,7 +128,7 @@ double wrapy(unsigned i) {
 
 
 
-#define SINCOS_POINTS 20         // multiple of 4
+#define SINCOS_POINTS 16         // multiple of 4
 
 void setCoefficients(uint32_t v1, uint32_t v2) {
     for(uint32_t j = 0; j < 14; ++j, v1 >>= 1, v2 >>= 1) {
@@ -179,8 +179,13 @@ uint32_t dac_encode(double coeff) {
 
 #define DAC_A      0
 #define DAC_B      1
+#define DAC_LIMIT  0
+#define DAC_POS    1
+#define DAC_BUFFERED (1u << 14)
+#define DAC_GAINx1   (1u << 13)
+#define DAC_ACTIVE   (1u << 12)
 
-void spi(unsigned cs, unsigned dac, uint16_t value) {
+void spi(unsigned cs, unsigned unit, uint16_t value) {
 	// Write Command Register for MCP4922 (12-bit DAC)
 	// 15   _A/B : 1 = DAC B,    0 = DAC A
 	// 14   BUF  : 1 = Buffered, 0 = Unbuffered
@@ -190,12 +195,12 @@ void spi(unsigned cs, unsigned dac, uint16_t value) {
 
 	// Select chip
 	if (cs) {
-		BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO_PIN_MASK;
+		BOARD_INITPINS_NOTCS_DAC_1_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
 	} else {
-		BOARD_INITPINS_NOTCS_DAC_POS_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PIN_MASK;
+		BOARD_INITPINS_NOTCS_DAC_0_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
 	}
 
-	unsigned word = (dac << 15) | (0b0011u << 12) | value;
+	unsigned word = (unit << 15) | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | value;
 
 	// Bit-bang SPI
 	for (unsigned i = 16; i--;) {
@@ -210,9 +215,9 @@ void spi(unsigned cs, unsigned dac, uint16_t value) {
 
 	// Deselect chip (and also latch DAC data when NOT_LDAC is tied low)
 	if (cs) {
-		BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_LIMIT_GPIO_PIN_MASK;
+		BOARD_INITPINS_NOTCS_DAC_1_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
 	} else {
-		BOARD_INITPINS_NOTCS_DAC_POS_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_POS_GPIO_PIN_MASK;
+		BOARD_INITPINS_NOTCS_DAC_0_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
 	}
 
 	// Without this delay, making an immediate next call to set unit B will fail (DAC won't latch)
@@ -253,7 +258,7 @@ int main(void) {
             //reset_delay();
 
             setCoefficients( sintab[i], sintab[(i + N_POINTS/4) % N_POINTS] );
-            nine_microsecond(); nine_microsecond(); nine_microsecond();
+            four_microseconds(); four_microseconds(); four_microseconds();
 
             //GPIOA->PDOR = (1 << 30 /*D6*/) | (1 << 31 /*D7*/); // Release integrators from reset and hold
 
@@ -274,21 +279,21 @@ int main(void) {
 
 		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
-		nine_microsecond();
+		four_microseconds();
 
 		spi(0, DAC_A, 0x800u);
 		spi(0, DAC_B, 0x800u);
 		spi(1, DAC_A, 0x800u);
 		spi(1, DAC_B, 0x800u);
 
-		nine_microsecond();
+		four_microseconds();
 
 		spi(0, DAC_A, 0);
 		spi(0, DAC_B, 0);
 		spi(1, DAC_A, 0);
 		spi(1, DAC_B, 0);
 
-		nine_microsecond();
+		four_microseconds();
     }
 
     // Simple step test
@@ -296,14 +301,14 @@ int main(void) {
 		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 		setCoefficients( DAC_WORD(7, 0), DAC_WORD(7, 0) );
 		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
-		nine_microsecond(); // settling time
+		four_microseconds(); // settling time
 
 		setCoefficients( DAC_WORD(7, 512), DAC_WORD(7, 512) );
-		nine_microsecond(); // settling time
+		four_microseconds(); // settling time
 
 	    // Set DAC to most negative
 		setCoefficients( DAC_WORD(7, 1023), DAC_WORD(7, 1023) );
-		nine_microsecond(); // settling time
+		four_microseconds(); // settling time
     }
 
 
@@ -328,8 +333,8 @@ int main(void) {
 
 		BOARD_INITPINS_Z_BLANK_GPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
 
-		nine_microsecond();
-		nine_microsecond();
+		four_microseconds();
+		four_microseconds();
 
 		BOARD_INITPINS_Z_BLANK_GPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
 
@@ -340,16 +345,36 @@ int main(void) {
 
 	    BOARD_INITPINS_X_INT_RESET_GPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 		BOARD_INITPINS_Y_INT_RESET_GPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+	}
 
+	// Positioning box test
+
+	if(0) {
+		BOARD_INITPINS_X_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+		BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+
+		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
+		for(unsigned i = 0; 1; ++i) {
+
+			if((i & 3) == 0) BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+			spi(DAC_POS, DAC_A, i & 2 ? 0xfff : 0); spi(DAC_POS, DAC_B, (i+1) & 2 ? 0xfff : 0);
+
+			BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+			four_microseconds();
+		}
 	}
 
 	// Starburst test
 
 	for(;1;) {
-		for (uint32_t i = 0; i < SINCOS_POINTS; ++i) {
+		for (unsigned i = 0; i < SINCOS_POINTS; ++i) {
             setCoefficients( sintab[i], costab[i] );
 
-		    delay(160); // Wait reset time
+    		spi(DAC_POS, DAC_A, i & 1 ? 0x300 : 0);
+    		spi(DAC_POS, DAC_B, i & 2 ? 0x200 : 0);
+
+		    delay(120); // Wait reset time
+    		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
 			BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 			BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
@@ -358,24 +383,24 @@ int main(void) {
     		BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
     		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
-    		if(!i) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
 			// Wait integrating time
-    		nine_microsecond();
-    		nine_microsecond();
-    		nine_microsecond();
-    		nine_microsecond();
-    		nine_microsecond();
-    		nine_microsecond();
+    		four_microseconds();
+    		four_microseconds();
+    		four_microseconds();
+    		four_microseconds();
+    		four_microseconds();
+    		four_microseconds();
 
     		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
-    		if(!i) BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
-
 
 		    BOARD_INITPINS_X_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch X
 		    BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
+		    if(i == SINCOS_POINTS/4) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+
     		// As soon as beam is off, we can short the integrator
+		    // Based on measurements, reset takes about 14µs
 			BOARD_INITPINS_X_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 			BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
         }
