@@ -370,8 +370,8 @@ int main(void) {
 		for (unsigned i = 0; i < SINCOS_POINTS; ++i) {
             setCoefficients( sintab[i], costab[i] );
 
-    		spi(DAC_POS, DAC_A, i & 1 ? 0x300 : 0);
-    		spi(DAC_POS, DAC_B, i & 2 ? 0x200 : 0);
+    		spi(DAC_POS, DAC_A, i & 1 ? 0x600 : 0);
+    		spi(DAC_POS, DAC_B, i & 2 ? 0x400 : 0);
 
 		    delay(120); // Wait reset time
     		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
