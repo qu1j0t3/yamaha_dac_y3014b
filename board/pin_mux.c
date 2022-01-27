@@ -20,15 +20,15 @@ pin_labels:
 - {pin_num: '2', pin_signal: PTD0/KBI0_P24/FTM2_CH2/SPI1_SCK, label: 'J1[8]/PTD0_D3_PWM2'}
 - {pin_num: '61', pin_signal: PTA1/KBI0_P1/FTM0_CH1/I2C0_4WSDAOUT/ACMP0_IN1/ADC0_SE1, label: 'J1[10]/PTA1_D4_T1/PTA1_IRRX', identifier: IRRX;NOTCS_DAC_LIMIT;NOTCS_DAC_1}
 - {pin_num: '1', pin_signal: PTD1/KBI0_P25/FTM2_CH3/SPI1_MOSI, label: 'J1[12]/PTD1_D5_PWM3'}
-- {pin_num: '23', pin_signal: PTB4/KBI0_P12/FTM2_CH4/SPI0_MISO/ACMP1_IN2/NMI_b, label: 'J1[14]/J2[10]/PTB4_D6_PWM4'}
+- {pin_num: '23', pin_signal: PTB4/KBI0_P12/FTM2_CH4/SPI0_MISO/ACMP1_IN2/NMI_b, label: 'J1[14]/J2[10]/PTB4_D6_PWM4', identifier: STOP}
 - {pin_num: '45', pin_signal: PTA7/KBI0_P7/FTM2_FLT2/ACMP1_IN1/ADC0_SE3, label: 'J1[16]/J2[17]/PTA7_D7_ANB1'}
 - {pin_num: '62', pin_signal: PTA0/KBI0_P0/FTM0_CH0/I2C0_4WSCLOUT/ACMP0_IN0/ADC0_SE0, label: 'J2[2]/PTA0_D8_T0', identifier: NOTCS_DAC_POS;NOTCS_DAC_0}
 - {pin_num: '19', pin_signal: PTH0/KBI1_P24/FTM2_CH0, label: 'J2[4]/PTH0_D9_PWM0'}
-- {pin_num: '22', pin_signal: PTB5/KBI0_P13/FTM2_CH5/SPI0_PCS/ACMP1_OUT, label: 'J2[6]/PTB5_D10_PWM5'}
-- {pin_num: '39', pin_signal: PTB3/KBI0_P11/SPI0_MOSI/FTM0_CH1/ADC0_SE7, label: 'J2[8]/J2[19]/PTB3_D11_ANB2'}
-- {pin_num: '40', pin_signal: PTB2/KBI0_P10/SPI0_SCK/FTM0_CH0/ADC0_SE6, label: 'J2[12]/J2[1]/PTB2_D13_T3'}
+- {pin_num: '22', pin_signal: PTB5/KBI0_P13/FTM2_CH5/SPI0_PCS/ACMP1_OUT, label: 'J2[6]/PTB5_D10_PWM5', identifier: Y_COMP_SEL}
+- {pin_num: '39', pin_signal: PTB3/KBI0_P11/SPI0_MOSI/FTM0_CH1/ADC0_SE7, label: 'J2[8]/J2[19]/PTB3_D11_ANB2', identifier: X_COMP_SEL}
+- {pin_num: '40', pin_signal: PTB2/KBI0_P10/SPI0_SCK/FTM0_CH0/ADC0_SE6, label: 'J2[12]/J2[1]/PTB2_D13_T3', identifier: TESTINPUT;STOP}
 - {pin_num: '60', pin_signal: PTA2/KBI0_P2/UART0_RX/I2C0_SDA, label: 'J2[18]/PTA2_ACCEL_SDA', identifier: ACCEL_SDA}
-- {pin_num: '59', pin_signal: PTA3/KBI0_P3/UART0_TX/I2C0_SCL, label: 'J2[20]/PTA3_ACCEL_SCL', identifier: ACCEL_SCL}
+- {pin_num: '59', pin_signal: PTA3/KBI0_P3/UART0_TX/I2C0_SCL, label: 'J2[20]/PTA3_ACCEL_SCL', identifier: ACCEL_SCL;TESTINPUT}
 - {pin_num: '10', pin_signal: VREFH, label: 'J2[16]/VDD_KE06Z'}
 - {pin_num: '11', pin_signal: VREFL, label: GND}
 - {pin_num: '63', pin_signal: PTC7/KBI0_P23/UART1_TX/CAN0_TX, label: 'J1[1]/PTC7_TXD1/UART1_TX_TGTMCU', identifier: DEBUG_UART_TX}
@@ -135,6 +135,9 @@ BOARD_InitPins:
   - {pin_num: '76', peripheral: GPIOB, signal: 'GPIO, 0', pin_signal: PTE0/KBI1_P0/SPI0_SCK/TCLK1/I2C1_SDA, direction: OUTPUT}
   - {pin_num: '75', peripheral: GPIOB, signal: 'GPIO, 1', pin_signal: PTE1/KBI1_P1/SPI0_MOSI/I2C1_SCL, direction: OUTPUT}
   - {pin_num: '61', peripheral: GPIOA, signal: 'GPIO, 1', pin_signal: PTA1/KBI0_P1/FTM0_CH1/I2C0_4WSDAOUT/ACMP0_IN1/ADC0_SE1, identifier: NOTCS_DAC_1, direction: OUTPUT}
+  - {pin_num: '39', peripheral: GPIOA, signal: 'GPIO, 11', pin_signal: PTB3/KBI0_P11/SPI0_MOSI/FTM0_CH1/ADC0_SE7, direction: OUTPUT}
+  - {pin_num: '22', peripheral: GPIOA, signal: 'GPIO, 13', pin_signal: PTB5/KBI0_P13/FTM2_CH5/SPI0_PCS/ACMP1_OUT, direction: OUTPUT}
+  - {pin_num: '40', peripheral: GPIOA, signal: 'GPIO, 10', pin_signal: PTB2/KBI0_P10/SPI0_SCK/FTM0_CH0/ADC0_SE6, identifier: STOP, direction: INPUT}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 /* clang-format on */
@@ -161,6 +164,27 @@ void BOARD_InitPins(void)
     };
     /* Initialize GPIO functionality on pin PTA1 (pin 61) */
     GPIO_PinInit(BOARD_INITPINS_NOTCS_DAC_1_GPIO_PORT, BOARD_INITPINS_NOTCS_DAC_1_PIN, &NOTCS_DAC_1_config);
+
+    gpio_pin_config_t STOP_config = {
+        .pinDirection = kGPIO_DigitalInput,
+        .outputLogic = 0U
+    };
+    /* Initialize GPIO functionality on pin PTA10 (pin 40) */
+    GPIO_PinInit(BOARD_INITPINS_STOP_GPIO_PORT, BOARD_INITPINS_STOP_PIN, &STOP_config);
+
+    gpio_pin_config_t X_COMP_SEL_config = {
+        .pinDirection = kGPIO_DigitalOutput,
+        .outputLogic = 0U
+    };
+    /* Initialize GPIO functionality on pin PTA11 (pin 39) */
+    GPIO_PinInit(BOARD_INITPINS_X_COMP_SEL_GPIO_PORT, BOARD_INITPINS_X_COMP_SEL_PIN, &X_COMP_SEL_config);
+
+    gpio_pin_config_t Y_COMP_SEL_config = {
+        .pinDirection = kGPIO_DigitalOutput,
+        .outputLogic = 0U
+    };
+    /* Initialize GPIO functionality on pin PTA13 (pin 22) */
+    GPIO_PinInit(BOARD_INITPINS_Y_COMP_SEL_GPIO_PORT, BOARD_INITPINS_Y_COMP_SEL_PIN, &Y_COMP_SEL_config);
 
     gpio_pin_config_t TRIGGER_config = {
         .pinDirection = kGPIO_DigitalOutput,
@@ -321,7 +345,7 @@ void BOARD_InitDEBUG_UARTPins(void)
 BOARD_InitACCELPins:
 - options: {coreID: core0, enableClock: 'true'}
 - pin_list:
-  - {pin_num: '59', peripheral: I2C0, signal: SCL, pin_signal: PTA3/KBI0_P3/UART0_TX/I2C0_SCL}
+  - {pin_num: '59', peripheral: I2C0, signal: SCL, pin_signal: PTA3/KBI0_P3/UART0_TX/I2C0_SCL, identifier: ACCEL_SCL}
   - {pin_num: '60', peripheral: I2C0, signal: SDA, pin_signal: PTA2/KBI0_P2/UART0_RX/I2C0_SDA}
   - {pin_num: '56', peripheral: GPIOA, signal: 'GPIO, 28', pin_signal: PTD4/KBI0_P28, direction: INPUT}
   - {pin_num: '57', peripheral: GPIOA, signal: 'GPIO, 27', pin_signal: PTD3/KBI0_P27/SPI1_PCS, direction: INPUT}

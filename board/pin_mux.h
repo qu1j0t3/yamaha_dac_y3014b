@@ -235,6 +235,51 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_NOTCS_DAC_1_PIN_MASK (1U << 1U)      /*!<@brief PORT pin mask */
                                                             /* @} */
 
+/*! @name PORTB3 (number 39), J2[8]/J2[19]/PTB3_D11_ANB2
+  @{ */
+
+/* Symbols to be used with GPIO driver */
+#define BOARD_INITPINS_X_COMP_SEL_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_X_COMP_SEL_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_X_COMP_SEL_GPIO_PORT kGPIO_PORTB    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK (1U << 11U) /*!<@brief GPIO pin mask */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_X_COMP_SEL_PORT PORTB               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_X_COMP_SEL_PIN 3U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_X_COMP_SEL_PIN_MASK (1U << 3U)      /*!<@brief PORT pin mask */
+                                                           /* @} */
+
+/*! @name PORTB5 (number 22), J2[6]/PTB5_D10_PWM5
+  @{ */
+
+/* Symbols to be used with GPIO driver */
+#define BOARD_INITPINS_Y_COMP_SEL_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_Y_COMP_SEL_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_Y_COMP_SEL_GPIO_PORT kGPIO_PORTB    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK (1U << 13U) /*!<@brief GPIO pin mask */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_Y_COMP_SEL_PORT PORTB               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_Y_COMP_SEL_PIN 5U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_Y_COMP_SEL_PIN_MASK (1U << 5U)      /*!<@brief PORT pin mask */
+                                                           /* @} */
+
+/*! @name PORTB2 (number 40), J2[12]/J2[1]/PTB2_D13_T3
+  @{ */
+
+/* Symbols to be used with GPIO driver */
+#define BOARD_INITPINS_STOP_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_STOP_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_STOP_GPIO_PORT kGPIO_PORTB    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_STOP_GPIO_PIN_MASK (1U << 10U) /*!<@brief GPIO pin mask */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_STOP_PORT PORTB               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_STOP_PIN 2U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_STOP_PIN_MASK (1U << 2U)      /*!<@brief PORT pin mask */
+                                                     /* @} */
+
 /*!
  * @brief Configures pin routing and optionally pin electrical features.
  *
