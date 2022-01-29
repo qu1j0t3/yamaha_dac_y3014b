@@ -129,9 +129,6 @@ double wrapy(unsigned i) {
 }
 
 
-
-#define SINCOS_POINTS 16         // multiple of 4
-
 void setCoefficients(uint32_t v1, uint32_t v2) {
     for(uint32_t j = 0; j < 14; ++j, v1 >>= 1, v2 >>= 1) {
     	// j = 0..9  D0..D9   mantissa
@@ -191,7 +188,7 @@ uint32_t dac_encode(double coeff) {
 #define DAC_GAINx1   (1u << 13)
 #define DAC_ACTIVE   (1u << 12)
 
-void spi(unsigned cs, unsigned unit, unsigned gain, uint16_t value) {
+void spi(unsigned cs, uint16_t word) {
 	// Write Command Register for MCP4922 (12-bit DAC)
 	// 15   _A/B : 1 = DAC B,    0 = DAC A
 	// 14   BUF  : 1 = Buffered, 0 = Unbuffered
@@ -205,8 +202,6 @@ void spi(unsigned cs, unsigned unit, unsigned gain, uint16_t value) {
 	} else {
 		BOARD_INITPINS_NOTCS_DAC_0_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
 	}
-
-	unsigned word = unit | DAC_BUFFERED | gain | DAC_ACTIVE | value;
 
 	// Bit-bang SPI
 	for (unsigned i = 16; i--;) {
@@ -232,17 +227,26 @@ void spi(unsigned cs, unsigned unit, unsigned gain, uint16_t value) {
 	// Note that DAC takes approx 4.5µs to slew 2.5V
 }
 
+#define SINCOS_POINTS 200         // multiple of 4
+
 int main(void) {
     /* Init the boards */
     BOARD_InitPins();
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
+    BOARD_InitLEDsPins();
 
-    uint32_t sintab[SINCOS_POINTS], costab[SINCOS_POINTS];
+    uint32_t sintab[SINCOS_POINTS], costab[SINCOS_POINTS], limitx[SINCOS_POINTS], limitlow[SINCOS_POINTS];
+    double coeffmag[SINCOS_POINTS];
+
     double k = 2*M_PI/SINCOS_POINTS;
     for(int i = 0; i < SINCOS_POINTS; ++i) {
-        sintab[i] = dac_encode(sin(i*k));
-        costab[i] = dac_encode(cos(i*k));
+    	double c = cos(i*k), s = sin(i*k);
+        costab[i] = dac_encode(c);
+        sintab[i] = dac_encode(s);
+        limitx[i] = fabs(c) > fabs(s); // set if X is faster changing integrator
+        limitlow[i] = limitx[i] ? c > 0 : s > 0; // set if the integrator is decreasing (coefficient positive)
+        coeffmag[i] = limitx[i] ? fabs(c) : fabs(s); // test purposes, we will use this to set a testing "distance" for limit DAC
     }
 
 
@@ -278,26 +282,26 @@ int main(void) {
     for(;0;) {
 		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
-		spi(0, DAC_A, DAC_GAINx1, 0xfffu);
-		spi(0, DAC_B, DAC_GAINx1, 0xfffu);
-		spi(1, DAC_A, DAC_GAINx1, 0xfffu);
-		spi(1, DAC_B, DAC_GAINx1, 0xfffu);
+		spi(0, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu);
+		spi(0, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu);
+		spi(1, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu);
+		spi(1, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu);
 
 		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
 		four_microseconds();
 
-		spi(0, DAC_A, DAC_GAINx1, 0x800u);
-		spi(0, DAC_B, DAC_GAINx1, 0x800u);
-		spi(1, DAC_A, DAC_GAINx1, 0x800u);
-		spi(1, DAC_B, DAC_GAINx1, 0x800u);
+		spi(0, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u);
+		spi(0, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u);
+		spi(1, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u);
+		spi(1, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u);
 
 		four_microseconds();
 
-		spi(0, DAC_A, DAC_GAINx1, 0);
-		spi(0, DAC_B, DAC_GAINx1, 0);
-		spi(1, DAC_A, DAC_GAINx1, 0);
-		spi(1, DAC_B, DAC_GAINx1, 0);
+		spi(0, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0);
+		spi(0, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0);
+		spi(1, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0);
+		spi(1, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0);
 
 		four_microseconds();
     }
@@ -363,8 +367,8 @@ int main(void) {
 		for(unsigned i = 0; 1; ++i) {
 
 			if((i & 3) == 0) BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
-			spi(DAC_POS, DAC_A, DAC_GAINx1, i & 2 ? 0xfff : 0);
-			spi(DAC_POS, DAC_B, DAC_GAINx1, (i+1) & 2 ? 0xfff : 0);
+			spi(DAC_POS, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (i     & 2 ? 0xfff : 0));
+			spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | ((i+1) & 2 ? 0xfff : 0));
 
 			BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 			four_microseconds();
@@ -373,58 +377,91 @@ int main(void) {
 
 	// Comparator test
 
-	// Set threshold voltage (in actual use, only one threshold needs to be set - for the fastest changing axis)
-	spi(DAC_LIMIT, DAC_A, DAC_GAINx2, (uint16_t)((3.0 / 5.0) * 0xfff));
-	spi(DAC_LIMIT, DAC_B, DAC_GAINx2, (uint16_t)((3.0 / 5.0) * 0xfff));
+	if(0) {
+		// Set threshold voltage (in actual use, only one threshold needs to be set - for the fastest changing axis)
+		uint16_t v = (uint16_t) ((3.0 / 5.0) * 0xfff);
+		spi(DAC_LIMIT, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | v);
+		spi(DAC_LIMIT, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | v);
 
-	// Arm X comparator
-	BOARD_INITPINS_X_COMP_SEL_GPIO->PSOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
-	BOARD_INITPINS_Y_COMP_SEL_GPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+		// Arm X comparator
+		BOARD_INITPINS_X_COMP_SEL_GPIO->PSOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+		BOARD_INITPINS_Y_COMP_SEL_GPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
 
-	// A realistic pair of coefficients. X will change faster than Y (angle < 45°)
-	uint32_t xc = dac_encode(-cos(DEG2RAD(20.0)));
-	uint32_t yc = dac_encode(-sin(DEG2RAD(20.0)));
+		// A realistic pair of coefficients. X will change faster than Y (angle < 45°)
+		setCoefficients( dac_encode(-cos(DEG2RAD(20.0))), dac_encode(-sin(DEG2RAD(20.0))) );
 
-    setCoefficients( xc, yc );
+		for(;1;) {
+			BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 
-    for(;1;) {
-		BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
+			BOARD_INITPINS_X_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch X
+			BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
-	    BOARD_INITPINS_X_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch X
-	    BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
+			BOARD_INITPINS_X_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+			BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 
-		BOARD_INITPINS_X_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
-		BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+			delay(120); // Wait reset time
 
-		delay(120); // Wait reset time
+			BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
-		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+			BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
+			BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 
-		BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-		BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-
-		BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
-		BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
+			BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
+			BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
 
-		// Wait integrating time
+			// Wait integrating time
 
-		while(! (BOARD_INITPINS_STOP_GPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK)) ;
+			while(! (BOARD_INITPINS_STOP_GPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK)) ;
+		}
 	}
 
 
 	// Starburst test
 
+
+	// Precompute control words for limit DAC
+	// Slow because of floating point
+
+	static uint16_t limit_dac_value[SINCOS_POINTS];
+
+	for (unsigned i = 0; i < SINCOS_POINTS; ++i) {
+		unsigned value = (unsigned)( ((2.5 + 0.25*coeffmag[i] * (limitlow[i] ? -1 : 1)) / 5.0) * 0xfff );
+		limit_dac_value[i] = (uint16_t)( (limitx[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | value );
+	}
+
 	for(;1;) {
+
 		for (unsigned i = 0; i < SINCOS_POINTS; ++i) {
-            setCoefficients( sintab[i], costab[i] );
 
-            // Position DAC has 2.5V range
-    		spi(DAC_POS, DAC_A, DAC_GAINx1, i & 1 ? 0x600 : 0); // 0.9375V
-    		spi(DAC_POS, DAC_B, DAC_GAINx1, i & 2 ? 0x400 : 0); // 0.625V
+            setCoefficients( costab[i], sintab[i] );
 
-		    delay(120); // Wait reset time
-    		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+    		// Set either a high-crossing or low-crossing threshold at the limit DAC.
+    		// If limitlow[i] is set, it means we must invert the comparator output
+
+			spi(DAC_LIMIT, limit_dac_value[i]);
+
+			// Position DAC has 2.5V range
+    		spi(DAC_POS, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (i & 1 ? 0x600 : 0)); // 0.9375V
+    		spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (i & 2 ? 0x600 : 0)); // 0.625V
+
+    		// Arm comparator on the fastest-changing integrator
+			// (greater magnitude coeffient of X and Y)
+			if(limitx[i]) {
+				BOARD_INITPINS_X_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+				BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+			} else {
+				BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+				BOARD_INITPINS_Y_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+			}
+
+			if(limitlow[i]) {
+				BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
+			} else {
+				BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
+			}
+
+			four_microseconds();
 
 			BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 			BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
@@ -434,20 +471,23 @@ int main(void) {
 
     		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
 
-			// Wait integrating time
-    		four_microseconds();
-    		four_microseconds();
-    		four_microseconds();
-    		four_microseconds();
-    		four_microseconds();
-    		four_microseconds();
+    		// All the above takes about 30-32 µs
 
-    		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
+
+			// Wait integrating time
+
+
+		    if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+
+			for(unsigned j = 0; j < 100000 && ! (limitlow[i] ^ ((BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK) != 0)); ++j )
+				;
+
+			BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
+
+    		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
 		    BOARD_INITPINS_X_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch X
 		    BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
-
-		    if(i == SINCOS_POINTS/4) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
     		// As soon as beam is off, we can short the integrator
 		    // Based on measurements, reset takes about 14µs

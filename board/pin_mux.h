@@ -280,6 +280,21 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_STOP_PIN_MASK (1U << 2U)      /*!<@brief PORT pin mask */
                                                      /* @} */
 
+/*! @name PORTH0 (number 19), J2[4]/PTH0_D9_PWM0
+  @{ */
+
+/* Symbols to be used with GPIO driver */
+#define BOARD_INITPINS_LIMIT_LOW_FGPIO FGPIOB             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_LIMIT_LOW_GPIO GPIOB               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_LIMIT_LOW_GPIO_PORT kGPIO_PORTH    /*!<@brief PORTB GPIO port: PORTB */
+#define BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK (1U << 24U) /*!<@brief GPIO pin mask */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_LIMIT_LOW_PORT PORTH               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_LIMIT_LOW_PIN 0U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_LIMIT_LOW_PIN_MASK (1U << 0U)      /*!<@brief PORT pin mask */
+                                                          /* @} */
+
 /*!
  * @brief Configures pin routing and optionally pin electrical features.
  *
