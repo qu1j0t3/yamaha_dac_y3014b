@@ -77,58 +77,6 @@ void four_microseconds() { // Tuned for Release configuration only!
 // Vout = 1/2 Vdd + 1/4 Vdd (-1 + d*2^-9 + 2^-10) 2^-N
 #define DAC_WORD(e, d) (((e) << 10) | (d))
 
-
-
-#define N_POINTS 15
-
-double px[N_POINTS]={
-  0,
-  -2.558,
-  -.953,
-  -31.627,
-  -28.557,
-  -58.59,
-  -50.975,
-  -56.129,
-  -37.608,
-  -34.776,
-  -19.754,
-  -16.425,
-  -22.965,
-  -11.744,
-  0
-};
-
-double py[N_POINTS]={
-  0,
-  -63.282,
-  -30.632,
-  -35.183,
-  -25.058,
-  -.409,
-  3.192,
-  23.773,
-  20.088,
-  29.424,
-  12.848,
-  14.423,
-  47.308,
-  41.31,
-  63.282
-};
-
-uint32_t xcoeff[N_POINTS*2+2];
-uint32_t ycoeff[N_POINTS*2+2];
-uint32_t length[N_POINTS*2+2];
-
-double wrapx(unsigned i) {
-  return i < N_POINTS ? px[i] : -px[N_POINTS + N_POINTS - i - 2];
-}
-double wrapy(unsigned i) {
-  return py[i < N_POINTS ? i : N_POINTS + N_POINTS - i - 2];
-}
-
-
 void setCoefficients(uint32_t v1, uint32_t v2) {
     for(uint32_t j = 0; j < 14; ++j, v1 >>= 1, v2 >>= 1) {
     	// j = 0..9  D0..D9   mantissa
@@ -227,7 +175,145 @@ void spi(unsigned cs, uint16_t word) {
 	// Note that DAC takes approx 4.5µs to slew 2.5V
 }
 
-#define SINCOS_POINTS 200         // multiple of 4
+#define SINCOS_POINTS 8         // multiple of 4
+
+
+#define N_POINTS 15
+
+double px[N_POINTS]={
+  0,
+  -2.558,
+  -.953,
+  -31.627,
+  -28.557,
+  -58.59,
+  -50.975,
+  -56.129,
+  -37.608,
+  -34.776,
+  -19.754,
+  -16.425,
+  -22.965,
+  -11.744,
+  0
+};
+
+double py[N_POINTS]={
+  0,
+  -63.282,
+  -30.632,
+  -35.183,
+  -25.058,
+  -.409,
+  3.192,
+  23.773,
+  20.088,
+  29.424,
+  12.848,
+  14.423,
+  47.308,
+  41.31,
+  63.282
+};
+
+
+double wrapx(unsigned i) {
+  return i < N_POINTS ? px[i] : -px[N_POINTS + N_POINTS - i - 2];
+}
+double wrapy(unsigned i) {
+  return py[i < N_POINTS ? i : N_POINTS + N_POINTS - i - 2];
+}
+
+uint32_t xcoeff[N_POINTS*2+2];
+uint32_t ycoeff[N_POINTS*2+2];
+uint16_t pos_dac_x[N_POINTS*2+2], pos_dac_y[N_POINTS*2+2], limit_dac[N_POINTS*2+2];
+uint32_t line_limit_x[N_POINTS*2+2],
+		 line_limit_low[N_POINTS*2+2];
+
+void update_display_list() {
+	for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
+		double x0 = wrapx(i),   y0 = wrapy(i),
+			   x1 = wrapx(i+1), y1 = wrapy(i+1),
+			   len = sqrt((x1-x0)*(x1-x0)+(y1-y0)*(y1-y0)),
+			   k = 0.01,
+			   c = (x1-x0)/len,
+			   s = (y1-y0)/len;
+
+		xcoeff[i] = dac_encode(c);
+		ycoeff[i] = dac_encode(s);
+		pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | ((uint16_t)( ((k*x0 + 1.25)/2.5) * 0xfff) & 0xfffu );
+		pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | ((uint16_t)( ((k*y0 + 1.25)/2.5) * 0xfff) & 0xfffu );
+		line_limit_x[i] = fabs(c) > fabs(s); // set if X is faster changing integrator
+		line_limit_low[i] = line_limit_x[i] ? c > 0 : s > 0; // set if the integrator is decreasing (coefficient positive)
+		unsigned value = (unsigned)( ((2.5 - (k/2.0)*(line_limit_x[i] ? x1-x0 : y1-y0)) / 5.0) * 0xfffu );
+		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | value );
+	}
+}
+
+void execute_line(int i) {
+    setCoefficients( xcoeff[i], ycoeff[i] );
+
+	// Set either a high-crossing or low-crossing threshold at the limit DAC.
+	// If limitlow[i] is set, it means we must invert the comparator output
+
+	spi(DAC_LIMIT, limit_dac[i]);
+
+	// Position DAC has 2.5V range
+	//spi(DAC_POS, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (i & 1 ? 0x600 : 0)); // 0.9375V
+	//spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (i & 2 ? 0x600 : 0)); // 0.625V
+	spi(DAC_POS, pos_dac_x[i]);
+	spi(DAC_POS, pos_dac_y[i]);
+
+	// Arm comparator on the fastest-changing integrator
+	// (greater magnitude coeffient of X and Y)
+	if(line_limit_x[i]) {
+		BOARD_INITPINS_X_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+	} else {
+		BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+	}
+
+	if(line_limit_low[i]) {
+		BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
+	} else {
+		BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
+	}
+
+	four_microseconds();
+
+	BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
+	BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
+
+	BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
+	BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
+
+	BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
+
+	// All the above takes about 30-32 µs
+
+
+	// Wait integrating time
+
+
+    if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+
+    while( ! (line_limit_low[i] ^ ((BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK) != 0)) )
+    	;
+
+	BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
+
+	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+
+    BOARD_INITPINS_X_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch X
+    BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
+
+	// As soon as beam is off, we can short the integrator
+    // Based on measurements, reset takes about 14µs
+	BOARD_INITPINS_X_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+	BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+}
+
 
 int main(void) {
     /* Init the boards */
@@ -430,7 +516,7 @@ int main(void) {
 		limit_dac_value[i] = (uint16_t)( (limitx[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | value );
 	}
 
-	for(;1;) {
+	for(;0;) {
 
 		for (unsigned i = 0; i < SINCOS_POINTS; ++i) {
 
@@ -498,53 +584,12 @@ int main(void) {
 
 	// FLAG test
 
-	uint32_t t = 0;
-	  for(unsigned i = 0; i < 2*(N_POINTS-1); ++i) {
-	    double dx = wrapx(i+1) - wrapx(i);
-	    double dy = wrapy(i+1) - wrapy(i);
-	    double d = sqrt(dx*dx + dy*dy);
-	    length[i] = (uint32_t)( d*.7 );
-	    t += length[i];
-	    xcoeff[i] = dac_encode(dx/d);//0x80 + 126*dx/d;
-	    ycoeff[i] = dac_encode(dy/d);//0x80 - 126*dy/d;
-	  }
-
-	  for(unsigned i = 0;;) {
-		  if(i==0){
-			BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
-		  }
-	    setCoefficients( xcoeff[i], ycoeff[i] );
-  		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
-	    delay(10);
-
-			BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-			BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-
-		BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
-		BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
-
-			BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
-
-			// Wait integrating time
-		delay(length[i]);
-
-      		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
-
-		BOARD_INITPINS_X_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch X
-		BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
-
-
-          ++i;
-          if(i == 2*(N_POINTS-1)) {
-
-  			BOARD_INITPINS_X_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
-  			BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
-
-  			delay(40);
-
-  			i = 0;
-          }
-	  }
+	update_display_list();
+	for(;;) {
+		for(unsigned i = 0; i < (2*N_POINTS-1); ++i) {
+			execute_line(i);
+		}
+	}
 
 
 }
