@@ -232,20 +232,32 @@ uint32_t line_limit_x[N_POINTS*2+2],
 
 void update_display_list() {
 	for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
-		double x0 = wrapx(i),   y0 = wrapy(i),
-			   x1 = wrapx(i+1), y1 = wrapy(i+1),
-			   len = sqrt((x1-x0)*(x1-x0)+(y1-y0)*(y1-y0)),
-			   k = 0.01,
-			   c = (x1-x0)/len,
-			   s = (y1-y0)/len;
+		double x0, y0, x1, y1, k;
+		double origin_x = 0, origin_y = 0; // shift position by this amount in DAC units (4095 is full scale = 2.5V)
+
+		x0 = wrapx(i);   y0 = wrapy(i);
+		x1 = wrapx(i+1); y1 = wrapy(i+1);
+		k = 0.005; // apply this factor to get Position DAC units from coordinate units
+		origin_x = 2048; // data is centred around origin
+		origin_y = 2048;
+
+		/* starburst
+		x0 = y0 = 0;
+		double a = 2*M_PI/(2*N_POINTS-2);
+		x1 = cos(a*i); y1 = sin(a*i);
+		k = 0.5; */
+
+		double dx = x1-x0, dy = y1-y0,
+			   len = sqrt(dx*dx + dy*dy),
+			   c = dx/len, s = dy/len;
 
 		xcoeff[i] = dac_encode(c);
 		ycoeff[i] = dac_encode(s);
-		pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | ((uint16_t)( ((k*x0 + 1.25)/2.5) * 0xfff) & 0xfffu );
-		pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | ((uint16_t)( ((k*y0 + 1.25)/2.5) * 0xfff) & 0xfffu );
+		pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)(k*x0*0xfffu + origin_x);
+		pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)(k*y0*0xfffu + origin_y);
 		line_limit_x[i] = fabs(c) > fabs(s); // set if X is faster changing integrator
-		line_limit_low[i] = line_limit_x[i] ? c > 0 : s > 0; // set if the integrator is decreasing (coefficient positive)
-		unsigned value = (unsigned)( ((2.5 - (k/2.0)*(line_limit_x[i] ? x1-x0 : y1-y0)) / 5.0) * 0xfffu );
+		line_limit_low[i] = line_limit_x[i] ? dx > 0 : dy > 0; // set if the integrator is decreasing (coefficient positive)
+		unsigned value = (unsigned)( (0.5 - (k/2.0)*(line_limit_x[i] ? dx : dy)) * 0xfffu );
 		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | value );
 	}
 }
@@ -259,8 +271,6 @@ void execute_line(int i) {
 	spi(DAC_LIMIT, limit_dac[i]);
 
 	// Position DAC has 2.5V range
-	//spi(DAC_POS, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (i & 1 ? 0x600 : 0)); // 0.9375V
-	//spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (i & 2 ? 0x600 : 0)); // 0.625V
 	spi(DAC_POS, pos_dac_x[i]);
 	spi(DAC_POS, pos_dac_y[i]);
 
@@ -285,18 +295,16 @@ void execute_line(int i) {
 	BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 	BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 
-	BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
+    if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+
+    BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
 	BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
 	BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
 
 	// All the above takes about 30-32 µs
 
-
 	// Wait integrating time
-
-
-    if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
     while( ! (line_limit_low[i] ^ ((BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK) != 0)) )
     	;
@@ -586,7 +594,7 @@ int main(void) {
 
 	update_display_list();
 	for(;;) {
-		for(unsigned i = 0; i < (2*N_POINTS-1); ++i) {
+		for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
 			execute_line(i);
 		}
 	}
