@@ -224,20 +224,20 @@ double wrapy(unsigned i) {
   return py[i < N_POINTS ? i : N_POINTS + N_POINTS - i - 2];
 }
 
-uint32_t xcoeff[N_POINTS*2+2];
-uint32_t ycoeff[N_POINTS*2+2];
+uint32_t xcoeff[N_POINTS*2+2], ycoeff[N_POINTS*2+2];
 uint16_t pos_dac_x[N_POINTS*2+2], pos_dac_y[N_POINTS*2+2], limit_dac[N_POINTS*2+2];
 uint32_t line_limit_x[N_POINTS*2+2],
-		 line_limit_low[N_POINTS*2+2];
+		 line_limit_low[N_POINTS*2+2],
+		 line_active[N_POINTS*2+2];
 
-void update_display_list() {
+void update_display_list(double k) {
 	for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
-		double x0, y0, x1, y1, k;
+		double x0, y0, x1, y1;
 		double origin_x = 0, origin_y = 0; // shift position by this amount in DAC units (4095 is full scale = 2.5V)
 
 		x0 = wrapx(i);   y0 = wrapy(i);
 		x1 = wrapx(i+1); y1 = wrapy(i+1);
-		k = 0.005; // apply this factor to get Position DAC units from coordinate units
+		//k = 0.001; // apply this factor to get Position DAC units from coordinate units
 		origin_x = 2048; // data is centred around origin
 		origin_y = 2048;
 
@@ -253,16 +253,38 @@ void update_display_list() {
 
 		xcoeff[i] = dac_encode(c);
 		ycoeff[i] = dac_encode(s);
-		pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)(k*x0*0xfffu + origin_x);
-		pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)(k*y0*0xfffu + origin_y);
+
+		int32_t posx = (int32_t)( k*x0*0xfffu + origin_x ),
+				posy = (int32_t)( k*y0*0xfffu + origin_y );
+
+		pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posx;
+		pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posy;
+
 		line_limit_x[i] = fabs(c) > fabs(s); // set if X is faster changing integrator
-		line_limit_low[i] = line_limit_x[i] ? dx > 0 : dy > 0; // set if the integrator is decreasing (coefficient positive)
-		unsigned value = (unsigned)( (0.5 - (k/2.0)*(line_limit_x[i] ? dx : dy)) * 0xfffu );
-		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | value );
+		double larger_delta = line_limit_x[i] ? dx : dy;
+		line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
+
+		int32_t limit = (int32_t)( (0.5 - k*larger_delta/2.0) * 0xfffu );
+		// While the limit DAC can use almost the whole range between 0 and 5V (with integrator "zero" at 2.5V),
+		// the integrators themselves cannot reach these limits. We therefore need to clamp the limit DAC
+		// to a reduced, practical range, or the system will stop waiting for a threshold that can't be reached.
+		// In tests with LF412CP op amp, the integrators can rise to about 4V (+1.5V), and drop to about 1.3V (-1.2V).
+		// With a different rail to rail amp, these limits can be increased.
+		// FIXME: This range may not be enough! Because the scope is typically calibrated to 1V full deflection.
+		// (As a failsafe, we might need a timeout as well.)
+		int32_t limit_max = (3.9/5.0)*0xfffu;
+		int32_t limit_min = (1.4/5.0)*0xfffu;
+		uint16_t clamped = limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit);
+		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamped );
+
+		// suppress lines that push DACs out of bounds
+		line_active[i] = posx >= 0 && posx < 0x1000 && posy >= 0 && posy < 0x1000;
 	}
 }
 
 void execute_line(int i) {
+	if(!line_active[i]) return;
+
     setCoefficients( xcoeff[i], ycoeff[i] );
 
 	// Set either a high-crossing or low-crossing threshold at the limit DAC.
@@ -271,8 +293,8 @@ void execute_line(int i) {
 	spi(DAC_LIMIT, limit_dac[i]);
 
 	// Position DAC has 2.5V range
-	spi(DAC_POS, pos_dac_x[i]);
-	spi(DAC_POS, pos_dac_y[i]);
+	spi(DAC_POS, pos_dac_x[i]); // TODO: These can be optimised to skip
+	spi(DAC_POS, pos_dac_y[i]); //       if the value does not change
 
 	// Arm comparator on the fastest-changing integrator
 	// (greater magnitude coeffient of X and Y)
@@ -292,10 +314,12 @@ void execute_line(int i) {
 
 	four_microseconds();
 
-	BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-	BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-
     if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+
+    uint32_t limit_mask = line_limit_low[i] ? 0 : BOARD_INITPINS_STOP_GPIO_PIN_MASK;
+
+    BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
+	BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 
     BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
 	BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
@@ -306,7 +330,7 @@ void execute_line(int i) {
 
 	// Wait integrating time
 
-    while( ! (line_limit_low[i] ^ ((BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK) != 0)) )
+    while( limit_mask ^ (BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK) )
     	;
 
 	BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
@@ -421,6 +445,9 @@ int main(void) {
 	for(;0;) {
 		setCoefficients( DAC_WORD(7, 1023), DAC_WORD(7, 0) );
 
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
 
 		BOARD_INITPINS_X_INT_RESET_GPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 		BOARD_INITPINS_Y_INT_RESET_GPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
@@ -436,6 +463,27 @@ int main(void) {
 
 		BOARD_INITPINS_Z_BLANK_GPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
 
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
+		four_microseconds();
 		four_microseconds();
 		four_microseconds();
 
@@ -592,8 +640,12 @@ int main(void) {
 
 	// FLAG test
 
-	update_display_list();
-	for(;;) {
+	for(unsigned f = 0; ; ++f) {
+		double k1 = 0.001*((f/1000) % 12);
+		if (k1 != k) {
+			k = k1;
+			update_display_list(k);
+		}
 		for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
 			execute_line(i);
 		}
