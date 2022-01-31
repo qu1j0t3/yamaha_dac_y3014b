@@ -228,12 +228,6 @@ unsigned update_line(unsigned i, double k, double x0, double y0, double x1, doub
 	origin_x = 2048; // data is centred around origin
 	origin_y = 2048;
 
-	/* starburst
-	x0 = y0 = 0;
-	double a = 2*M_PI/(2*N_POINTS-2);
-	x1 = cos(a*i); y1 = sin(a*i);
-	k = 0.5; */
-
 	double dx = x1-x0, dy = y1-y0,
 		   len = sqrt(dx*dx + dy*dy),
 		   c = dx/len, s = dy/len;
@@ -247,8 +241,10 @@ unsigned update_line(unsigned i, double k, double x0, double y0, double x1, doub
 	pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posx;
 	pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posy;
 
-	line_limit_x[i] = fabs(c) > fabs(s); // set if X is faster changing integrator
+	line_limit_x[i] = fabs(dx) > fabs(dy); // set if X is faster changing integrator
+
 	double larger_delta = line_limit_x[i] ? dx : dy;
+
 	line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
 
 	int32_t limit = (int32_t)( (0.5 - k*larger_delta/2.0) * 0xfffu );
@@ -260,6 +256,7 @@ unsigned update_line(unsigned i, double k, double x0, double y0, double x1, doub
 	// With a different rail to rail amp, these limits can be increased.
 	// FIXME: This range may not be enough! Because the scope is typically calibrated to 1V full deflection.
 	// (As a failsafe, we might need a timeout as well.)
+	// TODO: This can be self calibrating
 	int32_t limit_max = (int32_t)( (3.9/5.0)*0xfffu );
 	int32_t limit_min = (int32_t)( (1.4/5.0)*0xfffu );
 	uint16_t clamped = (uint16_t)( limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit) );
@@ -271,17 +268,35 @@ unsigned update_line(unsigned i, double k, double x0, double y0, double x1, doub
 	return posx >= 0 && posx < 0x1000 && posy >= 0 && posy < 0x1000;
 }
 
+double starburst_costab[N_POINTS], starburst_sintab[N_POINTS];
+
 void update_display_list(double k) {
 	for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
-		double x0, y0, x1, y1;
-		x0 = wrapx(i);   y0 = wrapy(i);
-		x1 = wrapx(i+1); y1 = wrapy(i+1);
+		double x0, y0, x1, y1, kk = k;
+
+		// x0 = wrapx(i);   y0 = wrapy(i);
+		// x1 = wrapx(i+1); y1 = wrapy(i+1);
+
+
+
+		/* starburst*/
+		if (i < N_POINTS-1) {
+			x0 = y0 = 0;
+			x1 = starburst_costab[i]; y1 = starburst_sintab[i];
+			kk = 0.2;
+		} else {
+			x0 = 30*starburst_costab[i - N_POINTS+1];
+			y0 = 30*starburst_sintab[i - N_POINTS+1];
+			x1 = 30*starburst_costab[i - N_POINTS+2];
+			y1 = 30*starburst_sintab[i - N_POINTS+2];
+		}
+
 
 		// Show line if either endpoint is within valid position range
 		// This is simpler than full clipping
-		if (update_line(i, k, x0, y0, x1, y1)) {
+		if (update_line(i, kk, x0, y0, x1, y1)) {
 			line_active[i] = 1;
-		} else if (update_line(i, k, x1, y1, x0, y0)) {
+		} else if (update_line(i, kk, x1, y1, x0, y0)) {
 			line_active[i] = 1;
 		} else  {
 			line_active[i] = 0;
@@ -303,16 +318,6 @@ void execute_line(int i) {
 	spi(DAC_POS, pos_dac_x[i]); // TODO: These can be optimised to skip
 	spi(DAC_POS, pos_dac_y[i]); //       if the value does not change
 
-	// Arm comparator on the fastest-changing integrator
-	// (greater magnitude coeffient of X and Y)
-	if(line_limit_x[i]) {
-		BOARD_INITPINS_X_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
-		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
-	} else {
-		BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
-		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
-	}
-
 	if(line_limit_low[i]) {
 		BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
 	} else {
@@ -320,6 +325,16 @@ void execute_line(int i) {
 	}
 
 	four_microseconds();
+
+	// Arm comparator on the fastest-changing integrator
+	// (greater magnitude coefficient of X and Y)
+	if(line_limit_x[i]) {
+		BOARD_INITPINS_X_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+	} else {
+		BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+	}
 
     uint32_t limit_mask = line_limit_low[i] ? 0 : BOARD_INITPINS_STOP_GPIO_PIN_MASK;
 
@@ -361,6 +376,13 @@ int main(void) {
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
     BOARD_InitLEDsPins();
+
+
+	double a = 2*M_PI/(N_POINTS-1);
+	for(int i = 0; i < N_POINTS; ++i) {
+		starburst_costab[i] = cos(a*i);
+		starburst_sintab[i] = sin(a*i);
+	}
 
     uint32_t sintab[SINCOS_POINTS], costab[SINCOS_POINTS], limitx[SINCOS_POINTS], limitlow[SINCOS_POINTS];
     double coeffmag[SINCOS_POINTS];
