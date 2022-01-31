@@ -49,12 +49,6 @@
 
 #define DEG2RAD(d) (2.0*M_PI*(d)/360.0)
 
-void reset_delay() {
-    for (uint32_t i = 0; i < 100; ++i) { //  250 => ~81 µs ; 500 => ~163µs
-        __asm("NOP"); /* delay */
-    }
-}
-
 void delay(unsigned j) {
     for (uint32_t i = 0; i < j; ++i) { //  500 => ~163µs
         __asm("NOP"); /* delay */
@@ -163,11 +157,8 @@ void spi(unsigned cs, uint16_t word) {
 	}
 
 	// Deselect chip (and also latch DAC data when NOT_LDAC is tied low)
-	if (cs) {
-		BOARD_INITPINS_NOTCS_DAC_1_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
-	} else {
-		BOARD_INITPINS_NOTCS_DAC_0_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
-	}
+	BOARD_INITPINS_NOTCS_DAC_1_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
+	BOARD_INITPINS_NOTCS_DAC_0_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
 
 	// Without this delay, making an immediate next call to set unit B will fail (DAC won't latch)
 	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
@@ -230,55 +221,71 @@ uint32_t line_limit_x[N_POINTS*2+2],
 		 line_limit_low[N_POINTS*2+2],
 		 line_active[N_POINTS*2+2];
 
+unsigned update_line(unsigned i, double k, double x0, double y0, double x1, double y1) {
+	double origin_x = 0, origin_y = 0; // shift position by this amount in DAC units (4095 is full scale = 2.5V)
+
+	//k = 0.001; // apply this factor to get Position DAC units from coordinate units
+	origin_x = 2048; // data is centred around origin
+	origin_y = 2048;
+
+	/* starburst
+	x0 = y0 = 0;
+	double a = 2*M_PI/(2*N_POINTS-2);
+	x1 = cos(a*i); y1 = sin(a*i);
+	k = 0.5; */
+
+	double dx = x1-x0, dy = y1-y0,
+		   len = sqrt(dx*dx + dy*dy),
+		   c = dx/len, s = dy/len;
+
+	xcoeff[i] = dac_encode(c);
+	ycoeff[i] = dac_encode(s);
+
+	int32_t posx = (int32_t)( k*x0*0xfffu + origin_x ),
+			posy = (int32_t)( k*y0*0xfffu + origin_y );
+
+	pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posx;
+	pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posy;
+
+	line_limit_x[i] = fabs(c) > fabs(s); // set if X is faster changing integrator
+	double larger_delta = line_limit_x[i] ? dx : dy;
+	line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
+
+	int32_t limit = (int32_t)( (0.5 - k*larger_delta/2.0) * 0xfffu );
+
+	// While the limit DAC can use almost the whole range between 0 and 5V (with integrator "zero" at 2.5V),
+	// the integrators themselves cannot reach these limits. We therefore need to clamp the limit DAC
+	// to a reduced, practical range, or the system will stop, waiting forever for a threshold that can't be reached.
+	// In tests with LF412CP op amp, the integrators can rise to about 4V (+1.5V), and drop to about 1.3V (-1.2V).
+	// With a different rail to rail amp, these limits can be increased.
+	// FIXME: This range may not be enough! Because the scope is typically calibrated to 1V full deflection.
+	// (As a failsafe, we might need a timeout as well.)
+	int32_t limit_max = (int32_t)( (3.9/5.0)*0xfffu );
+	int32_t limit_min = (int32_t)( (1.4/5.0)*0xfffu );
+	uint16_t clamped = (uint16_t)( limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit) );
+
+	limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamped );
+
+	// suppress lines that push DACs out of bounds
+	// TODO: proper clipping
+	return posx >= 0 && posx < 0x1000 && posy >= 0 && posy < 0x1000;
+}
+
 void update_display_list(double k) {
 	for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
 		double x0, y0, x1, y1;
-		double origin_x = 0, origin_y = 0; // shift position by this amount in DAC units (4095 is full scale = 2.5V)
-
 		x0 = wrapx(i);   y0 = wrapy(i);
 		x1 = wrapx(i+1); y1 = wrapy(i+1);
-		//k = 0.001; // apply this factor to get Position DAC units from coordinate units
-		origin_x = 2048; // data is centred around origin
-		origin_y = 2048;
 
-		/* starburst
-		x0 = y0 = 0;
-		double a = 2*M_PI/(2*N_POINTS-2);
-		x1 = cos(a*i); y1 = sin(a*i);
-		k = 0.5; */
-
-		double dx = x1-x0, dy = y1-y0,
-			   len = sqrt(dx*dx + dy*dy),
-			   c = dx/len, s = dy/len;
-
-		xcoeff[i] = dac_encode(c);
-		ycoeff[i] = dac_encode(s);
-
-		int32_t posx = (int32_t)( k*x0*0xfffu + origin_x ),
-				posy = (int32_t)( k*y0*0xfffu + origin_y );
-
-		pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posx;
-		pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posy;
-
-		line_limit_x[i] = fabs(c) > fabs(s); // set if X is faster changing integrator
-		double larger_delta = line_limit_x[i] ? dx : dy;
-		line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
-
-		int32_t limit = (int32_t)( (0.5 - k*larger_delta/2.0) * 0xfffu );
-		// While the limit DAC can use almost the whole range between 0 and 5V (with integrator "zero" at 2.5V),
-		// the integrators themselves cannot reach these limits. We therefore need to clamp the limit DAC
-		// to a reduced, practical range, or the system will stop waiting for a threshold that can't be reached.
-		// In tests with LF412CP op amp, the integrators can rise to about 4V (+1.5V), and drop to about 1.3V (-1.2V).
-		// With a different rail to rail amp, these limits can be increased.
-		// FIXME: This range may not be enough! Because the scope is typically calibrated to 1V full deflection.
-		// (As a failsafe, we might need a timeout as well.)
-		int32_t limit_max = (3.9/5.0)*0xfffu;
-		int32_t limit_min = (1.4/5.0)*0xfffu;
-		uint16_t clamped = limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit);
-		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamped );
-
-		// suppress lines that push DACs out of bounds
-		line_active[i] = posx >= 0 && posx < 0x1000 && posy >= 0 && posy < 0x1000;
+		// Show line if either endpoint is within valid position range
+		// This is simpler than full clipping
+		if (update_line(i, k, x0, y0, x1, y1)) {
+			line_active[i] = 1;
+		} else if (update_line(i, k, x1, y1, x0, y0)) {
+			line_active[i] = 1;
+		} else  {
+			line_active[i] = 0;
+		}
 	}
 }
 
@@ -314,17 +321,18 @@ void execute_line(int i) {
 
 	four_microseconds();
 
-    if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
-
     uint32_t limit_mask = line_limit_low[i] ? 0 : BOARD_INITPINS_STOP_GPIO_PIN_MASK;
+
+    if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
     BOARD_INITPINS_X_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 	BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 
-    BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
+	BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
+
+	BOARD_INITPINS_X_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch X
 	BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
-	BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
 
 	// All the above takes about 30-32 µs
 
@@ -396,6 +404,34 @@ int main(void) {
 	#endif
 
     // Test SPI DAC MCP4922
+
+    if(0) {
+    	/* Test levels
+
+    	// ;  Vref 2.499
+		spi(DAC_POS, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u); // should be ~ 1.25V  // 1.250
+		spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu); // should be ~ 2.5V   // 2.499
+		spi(DAC_LIMIT, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0x800u); // should be ~ 2.5V  // 1.253 WHY????????
+		//spi(DAC_LIMIT, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0xc00u); // should be ~ 3.75V  // 3.751
+		//spi(DAC_LIMIT, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu); // should be ~ 5V  // 4.789
+		spi(DAC_LIMIT, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0x800u); // should be ~ 2.5V  // 2.512
+		//spi(DAC_LIMIT, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0xc00u); // should be ~ 3.75V  // 3.766
+		//spi(DAC_LIMIT, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu); // should be ~ 5V    // 4.78
+		for(;;) ;*/
+    }
+
+    if (0) {
+		for(unsigned i = 0; ; ++i) {
+			// Test DAC ramp
+
+			if((i & 0xfff) == 0) BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
+			spi(DAC_LIMIT, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | (i & 0xfff));
+			spi(DAC_LIMIT, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | (i & 0xfff)); // should be ~ 2.5V  // 1.253 WHY????????
+
+			four_microseconds();
+			BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
+		}
+    }
 
     for(;0;) {
 		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
