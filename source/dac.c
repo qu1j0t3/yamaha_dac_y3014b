@@ -640,10 +640,12 @@ int main(void) {
 
 	// FLAG test
 
+	int gg = 0;
 	for(unsigned f = 0; ; ++f) {
-		double k1 = 0.001*((f/1000) % 12);
-		if (k1 != k) {
-			k = k1;
+		int g = (f >> 8) & 63;
+		if (g != gg) {
+			gg = g;
+			k = g ? k*1.08 : 0.0002;
 			update_display_list(k);
 		}
 		for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
