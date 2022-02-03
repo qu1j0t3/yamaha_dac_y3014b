@@ -221,10 +221,9 @@ uint32_t line_limit_x[N_POINTS*2+2],
 		 line_limit_low[N_POINTS*2+2],
 		 line_active[N_POINTS*2+2];
 
-unsigned update_line(unsigned i, double k, double x0, double y0, double x1, double y1) {
+unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, double y1) {
 	double origin_x = 0, origin_y = 0; // shift position by this amount in DAC units (4095 is full scale = 2.5V)
 
-	//k = 0.001; // apply this factor to get Position DAC units from coordinate units
 	origin_x = 2048; // data is centred around origin
 	origin_y = 2048;
 
@@ -294,9 +293,9 @@ void update_display_list(double k) {
 
 		// Show line if either endpoint is within valid position range
 		// This is simpler than full clipping
-		if (update_line(i, kk, x0, y0, x1, y1)) {
+		if (setup_line(i, kk, x0, y0, x1, y1)) {
 			line_active[i] = 1;
-		} else if (update_line(i, kk, x1, y1, x0, y0)) {
+		} else if (setup_line(i, kk, x1, y1, x0, y0)) {
 			line_active[i] = 1;
 		} else  {
 			line_active[i] = 0;
@@ -304,7 +303,7 @@ void update_display_list(double k) {
 	}
 }
 
-void execute_line(int i) {
+void execute_line(unsigned i) {
 	if(!line_active[i]) return;
 
     setCoefficients( xcoeff[i], ycoeff[i] );
@@ -324,6 +323,7 @@ void execute_line(int i) {
 		BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
 	}
 
+	four_microseconds(); // just one of these calls isn't quite enough
 	four_microseconds();
 
 	// Arm comparator on the fastest-changing integrator
@@ -694,6 +694,72 @@ int main(void) {
 			BOARD_INITPINS_X_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 			BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
         }
+	}
+
+
+	//  square test pattern
+
+	if(1) {
+		// Note that X = 0 and Y = 0 correspond to Position DAC in mid-range, i.e. 1.25V
+		// DAC value = k*x0*0xfffu + 2048
+		// The addressable range of Position DAC is therefore
+		// -2048/(4095*k) .. (4095-2048)/(4095*k) ... if k = 1,   -0.5 .. +0.5
+		// The limit DAC (line endpoint, integrator stop) is intended to be in the same units
+
+		double k = 0.5; // X ordinate from -0.5..+0.5
+		line_active[0] = setup_line(0, k, -.5, -.5, +.5, -.5);
+		line_active[1] = setup_line(1, k, +.5, -.5, +.5, +.5);
+		line_active[2] = setup_line(2, k, +.5, +.5, -.5, +.5);
+		line_active[3] = setup_line(3, k, -.5, +.5, -.5, -.5);
+		line_active[4] = setup_line(4, k, -.5, -.4, +.5, -.4);
+		line_active[5] = setup_line(5, k, -.5, +.4, +.5, +.4);
+		line_active[6] = setup_line(6, k, -.5, 0, +.5, 0);
+		line_active[7] = setup_line(7, k, 0, -.5, 0, +.5);
+		line_active[8] = setup_line(8, k, -.4, -.5, -.4, +.5);
+		line_active[9] = setup_line(9, k, +.4, -.5, +.4, +.5);
+
+		for(;;) {
+			execute_line(0);
+			execute_line(1);
+			execute_line(2);
+			execute_line(3);
+			execute_line(4);
+			execute_line(5);
+			execute_line(6);
+			execute_line(7);
+			execute_line(8);
+			execute_line(9);
+		}
+	}
+
+	// diagonal_test
+
+	if(0) {
+		// Note that X = 0 and Y = 0 correspond to Position DAC in mid-range, i.e. 1.25V
+		// DAC value = k*x0*0xfffu + 2048
+		// The addressable range of Position DAC is therefore
+		// -2048/(4095*k) .. (4095-2048)/(4095*k) ... if k = 1,   -0.5 .. +0.5
+		// The limit DAC (line endpoint, integrator stop) is intended to be in the same units
+
+		double k = 0.25; // X ordinate from -2 .. 2
+
+		// Pick angles so that X will be larger coefficient
+		// first line dx=1, dy=1, this is 1023 position DAC units or 0.625V.
+		// measured limit dac @ 1.878 X    2.200 Y   position DAC  2.200  2.200
+		// limit should be target delta voltage (x1 or y1), biased by 2.5v which is the integrator "zero"
+		//   int32_t limit = (int32_t)( (0.5 - k*larger_delta/2.0) * 0xfffu );
+		// = (0.5 - 0.125) * 5.0
+		line_active[0] = setup_line(0, k, 0, 0.95, 1, 0);
+		line_active[1] = setup_line(1, k, 0, 0, .5, .475);
+		line_active[2] = setup_line(2, k, 1, 0, 1+0.05*(0-1), 0+0.05*(0.95-0));
+		line_active[3] = setup_line(3, k, .5, .475, .5+0.05*(0-.5), .475+0.05*(0-.475));
+
+		for(;;) {
+			execute_line(0);
+			execute_line(1);
+			execute_line(2);
+			execute_line(3);
+		}
 	}
 
 	// FLAG test
