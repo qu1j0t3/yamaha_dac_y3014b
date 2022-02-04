@@ -231,8 +231,15 @@ unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, doubl
 		   len = sqrt(dx*dx + dy*dy),
 		   c = dx/len, s = dy/len;
 
-	xcoeff[i] = dac_encode(c);
-	ycoeff[i] = dac_encode(s);
+	// Raw uncalibrated coefficients
+	//xcoeff[i] = dac_encode(c);
+	//ycoeff[i] = dac_encode(s); // 0.01 offset in Y is about 0.57 degrees
+
+	// Calibrated manually 2022-02-03
+	// To do so, run Coefficient DAC program below
+	xcoeff[i] = dac_encode((c-0.015)*.95);
+	ycoeff[i] = dac_encode((s-0.015)*.95); // 0.01 offset in Y is about 0.57 degrees
+
 
 	int32_t posx = (int32_t)( k*x0*0xfffu + origin_x ),
 			posy = (int32_t)( k*y0*0xfffu + origin_y );
@@ -353,12 +360,19 @@ void execute_line(unsigned i) {
 
 	// Wait integrating time
 
-    while( limit_mask ^ (BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK) )
-    	;
+	/* implements a dashed line; dashes are approx 4.2mm long
+    for(i=0; limit_mask ^ (BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK) ; ++i) {
+    	if(i & 8) BOARD_INITPINS_Z_BLANK_FGPIO->PTOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+    }*/
+
+	// solid line
+	while(limit_mask ^ (BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK))
+		;
 
 	BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
 
 	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+
 
     BOARD_INITPINS_X_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch X
     BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
@@ -521,29 +535,7 @@ int main(void) {
 
 		BOARD_INITPINS_Z_BLANK_GPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
 
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
+		delay(700);
 
 		BOARD_INITPINS_Z_BLANK_GPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
 
@@ -699,7 +691,7 @@ int main(void) {
 
 	//  square test pattern
 
-	if(1) {
+	if(0) {
 		// Note that X = 0 and Y = 0 correspond to Position DAC in mid-range, i.e. 1.25V
 		// DAC value = k*x0*0xfffu + 2048
 		// The addressable range of Position DAC is therefore
@@ -729,6 +721,25 @@ int main(void) {
 			execute_line(7);
 			execute_line(8);
 			execute_line(9);
+		}
+	}
+
+	// DAC Coefficient calibrator test pattern
+
+	if(1) {
+		double k = 0.75;
+		// Also a 45° version might be good
+		line_active[0] = setup_line(0, k, -.5, 0, 0.45, 0);
+		line_active[1] = setup_line(1, k, +.5, 0, -0.45, 0);
+		line_active[2] = setup_line(2, k, 0, -.5, 0, 0.45);
+		line_active[3] = setup_line(3, k, 0, +.5, 0, -0.45);
+
+		for(;;) {
+			execute_line(0);
+			execute_line(1);
+			execute_line(2);
+			execute_line(3);
+			execute_line(4);
 		}
 	}
 
