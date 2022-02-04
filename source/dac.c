@@ -726,8 +726,10 @@ int main(void) {
 
 	// DAC Coefficient calibrator test pattern
 
-	if(1) {
+	if(0) {
 		double k = 0.75;
+		// Note that this calibration changes a lot with the magnitude of the coefficients,
+		// i.e. seems to be nonlinear. We might need to do a calibration at 0.95x and say 0.05x
 		// Also a 45° version might be good
 		line_active[0] = setup_line(0, k, -.5, 0, 0.45, 0);
 		line_active[1] = setup_line(1, k, +.5, 0, -0.45, 0);
@@ -740,6 +742,26 @@ int main(void) {
 			execute_line(2);
 			execute_line(3);
 			execute_line(4);
+		}
+	}
+
+	// Circle test
+
+	if(1) {
+		unsigned i, n = 31;
+		double k = 0.35;
+		// Note that this calibration changes a lot with the magnitude of the coefficients,
+		// i.e. seems to be nonlinear. We might need to do a calibration at 0.95x and say 0.05x
+		// Also a 45° version might be good
+		double a = 2*M_PI/n;
+		for(i = 0; i < n; ++i) {
+			line_active[i] = setup_line(i, k, cos(a*i), sin(a*i), cos(a*(i+1)), sin(a*(i+1)));
+		}
+
+		for(;;) {
+			for(i = 0; i < n; ++i) {
+				execute_line(i);
+			}
 		}
 	}
 
