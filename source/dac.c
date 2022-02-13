@@ -215,13 +215,13 @@ double wrapy(unsigned i) {
   return py[i < N_POINTS ? i : N_POINTS + N_POINTS - i - 2];
 }
 
-uint32_t xcoeff[N_POINTS*2+2], ycoeff[N_POINTS*2+2];
+uint32_t xcoeff[N_POINTS*2+2], ycoeff[N_POINTS*2+2], line_dash[N_POINTS*2+2];
 uint16_t pos_dac_x[N_POINTS*2+2], pos_dac_y[N_POINTS*2+2], limit_dac[N_POINTS*2+2];
 uint32_t line_limit_x[N_POINTS*2+2],
 		 line_limit_low[N_POINTS*2+2],
 		 line_active[N_POINTS*2+2];
 
-unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, double y1) {
+unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, double y1, uint32_t dash) {
 	double origin_x = 0, origin_y = 0; // shift position by this amount in DAC units (4095 is full scale = 2.5V)
 
 	origin_x = 2048; // data is centred around origin
@@ -230,6 +230,8 @@ unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, doubl
 	double dx = x1-x0, dy = y1-y0,
 		   len = sqrt(dx*dx + dy*dy),
 		   c = dx/len, s = dy/len;
+
+	line_dash[i] = dash;
 
 	// Raw uncalibrated coefficients
 	//xcoeff[i] = dac_encode(c);
@@ -241,8 +243,8 @@ unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, doubl
 	ycoeff[i] = dac_encode((s-0.015)*.95); // 0.01 offset in Y is about 0.57 degrees
 
 
-	int32_t posx = (int32_t)( k*x0*0xfffu + origin_x ),
-			posy = (int32_t)( k*y0*0xfffu + origin_y );
+	int32_t posx = (int32_t)( origin_x - k*x0*0xfffu ),
+			posy = (int32_t)( origin_y - k*y0*0xfffu );
 
 	pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posx;
 	pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posy;
@@ -295,14 +297,14 @@ void update_display_list(double k) {
 			y0 = 30*starburst_sintab[i - N_POINTS+1];
 			x1 = 30*starburst_costab[i - N_POINTS+2];
 			y1 = 30*starburst_sintab[i - N_POINTS+2];
-		}
+		}*/
 
 
 		// Show line if either endpoint is within valid position range
 		// This is simpler than full clipping
-		if (setup_line(i, kk, x0, y0, x1, y1)) {
+		if (setup_line(i, kk, x0, y0, x1, y1, 0)) {
 			line_active[i] = 1;
-		} else if (setup_line(i, kk, x1, y1, x0, y0)) {
+		} else if (setup_line(i, kk, x1, y1, x0, y0, 0)) {
 			line_active[i] = 1;
 		} else  {
 			line_active[i] = 0;
@@ -360,14 +362,27 @@ void execute_line(unsigned i) {
 
 	// Wait integrating time
 
-	/* implements a dashed line; dashes are approx 4.2mm long
-    for(i=0; limit_mask ^ (BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK) ; ++i) {
-    	if(i & 8) BOARD_INITPINS_Z_BLANK_FGPIO->PTOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
-    }*/
+	// Modulo is quite slow on this processor, so use an
+	// array lookup as a fast but constant time "mod 30"
+	static uint32_t next[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,0};
+	if (line_dash[i]) {
+		// implements a dashed line; dashes are approx 4.2mm long
+		//for(i=0; limit_mask ^ (BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK) ; ++i) {
+		//	if(i & 8) BOARD_INITPINS_Z_BLANK_FGPIO->PTOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+		//}
 
-	// solid line
-	while(limit_mask ^ (BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK))
-		;
+		for(uint32_t m = 0; limit_mask ^ (BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK); m = next[m]) {
+			if(line_dash[i] & (1u << m)) {
+				BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+			} else {
+				BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+			}
+		}
+	} else {
+		// solid line
+		while(limit_mask ^ (BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK))
+			;
+	}
 
 	BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
 
@@ -691,24 +706,26 @@ int main(void) {
 
 	//  square test pattern
 
-	if(0) {
+	if(1) {
 		// Note that X = 0 and Y = 0 correspond to Position DAC in mid-range, i.e. 1.25V
 		// DAC value = k*x0*0xfffu + 2048
 		// The addressable range of Position DAC is therefore
 		// -2048/(4095*k) .. (4095-2048)/(4095*k) ... if k = 1,   -0.5 .. +0.5
 		// The limit DAC (line endpoint, integrator stop) is intended to be in the same units
 
-		double k = 0.5; // X ordinate from -0.5..+0.5
-		line_active[0] = setup_line(0, k, -.5, -.5, +.5, -.5);
-		line_active[1] = setup_line(1, k, +.5, -.5, +.5, +.5);
-		line_active[2] = setup_line(2, k, +.5, +.5, -.5, +.5);
-		line_active[3] = setup_line(3, k, -.5, +.5, -.5, -.5);
-		line_active[4] = setup_line(4, k, -.5, -.4, +.5, -.4);
-		line_active[5] = setup_line(5, k, -.5, +.4, +.5, +.4);
-		line_active[6] = setup_line(6, k, -.5, 0, +.5, 0);
-		line_active[7] = setup_line(7, k, 0, -.5, 0, +.5);
-		line_active[8] = setup_line(8, k, -.4, -.5, -.4, +.5);
-		line_active[9] = setup_line(9, k, +.4, -.5, +.4, +.5);
+		double k = 0.75;
+		uint32_t dash = 0b100100100100100100100100100100;
+		uint32_t dash2 = 0b111110000011111000001111100000;
+		line_active[0] = setup_line(0, k, -.5, -.5, +.5, -.5, 0);
+		line_active[1] = setup_line(1, k, +.5, -.5, +.5, +.5, 0);
+		line_active[2] = setup_line(2, k, +.5, +.5, -.5, +.5, 0);
+		line_active[3] = setup_line(3, k, -.5, +.5, -.5, -.5, 0);
+		line_active[4] = setup_line(4, k, -.5, -.4, +.5, -.4, dash);
+		//line_active[5] = setup_line(5, k, -.5, +.4, +.5, +.4);
+		line_active[6] = setup_line(6, k, -.5, 0, +.5, 0, dash2);
+		line_active[7] = setup_line(7, k, 0, -.5, 0, +.5, dash2);
+		line_active[8] = setup_line(8, k, -.4, -.5, -.4, +.5, dash);
+		//line_active[9] = setup_line(9, k, +.4, -.5, +.4, +.5);
 
 		for(;;) {
 			execute_line(0);
@@ -731,10 +748,10 @@ int main(void) {
 		// Note that this calibration changes a lot with the magnitude of the coefficients,
 		// i.e. seems to be nonlinear. We might need to do a calibration at 0.95x and say 0.05x
 		// Also a 45° version might be good
-		line_active[0] = setup_line(0, k, -.5, 0, 0.45, 0);
-		line_active[1] = setup_line(1, k, +.5, 0, -0.45, 0);
-		line_active[2] = setup_line(2, k, 0, -.5, 0, 0.45);
-		line_active[3] = setup_line(3, k, 0, +.5, 0, -0.45);
+		line_active[0] = setup_line(0, k, -.5, 0, 0.45, 0, 0);
+		line_active[1] = setup_line(1, k, +.5, 0, -0.45, 0, 0);
+		line_active[2] = setup_line(2, k, 0, -.5, 0, 0.45, 0);
+		line_active[3] = setup_line(3, k, 0, +.5, 0, -0.45, 0);
 
 		for(;;) {
 			execute_line(0);
@@ -747,15 +764,12 @@ int main(void) {
 
 	// Circle test
 
-	if(1) {
+	if(0) {
 		unsigned i, n = 31;
-		double k = 0.35;
-		// Note that this calibration changes a lot with the magnitude of the coefficients,
-		// i.e. seems to be nonlinear. We might need to do a calibration at 0.95x and say 0.05x
-		// Also a 45° version might be good
+		double k = 0.4;
 		double a = 2*M_PI/n;
 		for(i = 0; i < n; ++i) {
-			line_active[i] = setup_line(i, k, cos(a*i), sin(a*i), cos(a*(i+1)), sin(a*(i+1)));
+			line_active[i] = setup_line(i, k, cos(a*i), sin(a*i), cos(a*(i+1)), sin(a*(i+1)), 0);
 		}
 
 		for(;;) {
@@ -782,10 +796,10 @@ int main(void) {
 		// limit should be target delta voltage (x1 or y1), biased by 2.5v which is the integrator "zero"
 		//   int32_t limit = (int32_t)( (0.5 - k*larger_delta/2.0) * 0xfffu );
 		// = (0.5 - 0.125) * 5.0
-		line_active[0] = setup_line(0, k, 0, 0.95, 1, 0);
-		line_active[1] = setup_line(1, k, 0, 0, .5, .475);
-		line_active[2] = setup_line(2, k, 1, 0, 1+0.05*(0-1), 0+0.05*(0.95-0));
-		line_active[3] = setup_line(3, k, .5, .475, .5+0.05*(0-.5), .475+0.05*(0-.475));
+		line_active[0] = setup_line(0, k, 0, 0.95, 1, 0, 0);
+		line_active[1] = setup_line(1, k, 0, 0, .5, .475, 0);
+		//line_active[2] = setup_line(2, k, 1, 0, 1+0.05*(0-1), 0+0.05*(0.95-0));
+		//line_active[3] = setup_line(3, k, .5, .475, .5+0.05*(0-.5), .475+0.05*(0-.475));
 
 		for(;;) {
 			execute_line(0);
@@ -798,13 +812,17 @@ int main(void) {
 	// FLAG test
 
 	int gg = 0;
+
+	update_display_list(0.005);
+
 	for(unsigned f = 0; ; ++f) {
+		/*
 		int g = (f >> 8) & 63;
 		if (g != gg) {
 			gg = g;
 			k = g ? k*1.08 : 0.0002;
 			update_display_list(k);
-		}
+		}*/
 		for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
 			execute_line(i);
 		}
