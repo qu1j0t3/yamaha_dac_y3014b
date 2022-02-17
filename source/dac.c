@@ -215,7 +215,7 @@ double wrapy(unsigned i) {
   return py[i < N_POINTS ? i : N_POINTS + N_POINTS - i - 2];
 }
 
-#define DISPLAY_LIST_MAX 220
+#define DISPLAY_LIST_MAX 300
 
 uint32_t xcoeff[DISPLAY_LIST_MAX], ycoeff[DISPLAY_LIST_MAX], line_dash[DISPLAY_LIST_MAX];
 uint16_t pos_dac_x[DISPLAY_LIST_MAX], pos_dac_y[DISPLAY_LIST_MAX], limit_dac[DISPLAY_LIST_MAX];
@@ -649,9 +649,9 @@ int main(void) {
 		}
 	}
 
-	if(0) {
+	if(1) {
 		unsigned cnt = 0;
-#define LINE(x0,y0,x1,y1) if(!setup_line_int(cnt++, x0-1022, y0-1022, x1-1022, y1-1022, 0)) goto square;
+#define LINE(x0,y0,x1,y1) if(!setup_line_int(cnt++, 2*(x0-1022), 2*(y0-1022), 2*(x1-1022), 2*(y1-1022), 0)) goto square;
 #include "/Users/toby/Documents/Electronics/vectors_v2/larsb-imlac/maze.c"
 
 		for(;;) {
