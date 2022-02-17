@@ -221,63 +221,68 @@ uint32_t xcoeff[DISPLAY_LIST_MAX], ycoeff[DISPLAY_LIST_MAX], line_dash[DISPLAY_L
 uint16_t pos_dac_x[DISPLAY_LIST_MAX], pos_dac_y[DISPLAY_LIST_MAX], limit_dac[DISPLAY_LIST_MAX];
 uint16_t line_limit_x[DISPLAY_LIST_MAX],
 		 line_limit_low[DISPLAY_LIST_MAX],
-		 line_active[DISPLAY_LIST_MAX];
+		 line_active[DISPLAY_LIST_MAX],
+		 is_point[DISPLAY_LIST_MAX];
 
-unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, double y1, uint32_t dash) {
-	double origin_x = 0, origin_y = 0; // shift position by this amount in DAC units (4095 is full scale = 2.5V)
+unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash) {
+	int dx = x1-x0, dy = y1-y0, posx, posy;
+	double len = sqrt((double)dx*(double)dx + (double)dy*(double)dy);
 
-	origin_x = 2048; // data is centred around origin
-	origin_y = 2048;
+	// treat very short lines as points (since crt cannot resolve anyway)
+	is_point[i] = len < 5.0;
 
-	double dx = x1-x0, dy = y1-y0,
-		   len = sqrt(dx*dx + dy*dy),
-		   c = dx/len, s = dy/len;
+	if (is_point[i]) {
+		posx = 2048 - (x0+x1)/2;
+		posy = 2048 - (y0+y1)/2;
+	} else {
+		double c = dx/len, s = dy/len;
 
-	line_dash[i] = dash;
+		posx = 2048 - x0;
+		posy = 2048 - y0;
 
-	// Raw uncalibrated coefficients
-	xcoeff[i] = dac_encode(c);
-	ycoeff[i] = dac_encode(s); // 0.01 offset in Y is about 0.57 degrees
+		line_dash[i] = dash;
 
-	// Calibrated manually 2022-02-03
-	// To do so, run Coefficient DAC program below
-	//xcoeff[i] = dac_encode((c)*.95+0.005);
-	//ycoeff[i] = dac_encode((s)*.95+0.005); // 0.01 offset in Y is about 0.57 degrees
+		xcoeff[i] = dac_encode(c); // scale these coefficients to slow down integration, but angle precision decreases!
+		ycoeff[i] = dac_encode(s); // recommend not scaling by less than 0.25
 
+		line_limit_x[i] = abs(dx) > abs(dy); // set if X is faster changing integrator
 
-	int32_t posx = (int32_t)( origin_x - k*x0*0xfffu ),
-			posy = (int32_t)( origin_y - k*y0*0xfffu );
+		int larger_delta = line_limit_x[i] ? dx : dy;
+
+		line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
+
+		int delta = (line_limit_low[i] ? 1 : -1) * (abs(larger_delta)+2) / 2;
+		uint16_t limit = 2048 - delta;
+
+		// While the limit DAC can use almost the whole range between 0 and 5V (with integrator "zero" at 2.5V),
+		// the integrators themselves cannot reach these limits. We therefore need to clamp the limit DAC
+		// to a reduced, practical range, or the system will stop, waiting forever for a threshold that can't be reached.
+		// In tests with LF412CP op amp, the integrators can rise to about 4V (+1.5V), and drop to about 1.3V (-1.2V).
+		// With a different rail to rail amp, these limits can be increased.
+		// FIXME: This range may not be enough! Because the scope is typically calibrated to 1V full deflection.
+		// (As a failsafe, we might need a timeout as well.)
+		// TODO: This can be self calibrating
+
+		/* Update: Changed to MCP6292 op amp for integrator and removed the clamping.
+		int32_t limit_max = (int32_t)( (4.95/5.0)*0xfffu );
+		int32_t limit_min = (int32_t)( (0.05/5.0)*0xfffu );
+		uint16_t clamped = limit; //(uint16_t)( limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit) );*/
+
+		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | limit );
+	}
 
 	pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posx;
 	pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posy;
 
-	line_limit_x[i] = fabs(dx) > fabs(dy); // set if X is faster changing integrator
-
-	double larger_delta = line_limit_x[i] ? dx : dy;
-
-	line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
-
-	int32_t limit = (int32_t)( (0.5 - k*larger_delta/2.0) * 0xfffu );
-
-	// While the limit DAC can use almost the whole range between 0 and 5V (with integrator "zero" at 2.5V),
-	// the integrators themselves cannot reach these limits. We therefore need to clamp the limit DAC
-	// to a reduced, practical range, or the system will stop, waiting forever for a threshold that can't be reached.
-	// In tests with LF412CP op amp, the integrators can rise to about 4V (+1.5V), and drop to about 1.3V (-1.2V).
-	// With a different rail to rail amp, these limits can be increased.
-	// FIXME: This range may not be enough! Because the scope is typically calibrated to 1V full deflection.
-	// (As a failsafe, we might need a timeout as well.)
-	// TODO: This can be self calibrating
-
-	// Update: Changed to MCP6292 op amp for integrator and removed the clamping.
-	int32_t limit_max = (int32_t)( (4.95/5.0)*0xfffu );
-	int32_t limit_min = (int32_t)( (0.05/5.0)*0xfffu );
-	uint16_t clamped = limit; //(uint16_t)( limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit) );
-
-	limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamped );
-
 	// suppress lines that push DACs out of bounds
 	// TODO: proper clipping
 	return line_active[i] = posx >= 0 && posx < 0x1000 && posy >= 0 && posy < 0x1000;
+}
+
+// Assumes data is centred on (0,0); k factor will scale input coordinates to -0.5 .. +0.5
+unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, double y1, uint32_t dash) {
+	k *= 0xfff; // scale to position DAC units
+	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), dash);
 }
 
 double starburst_costab[N_POINTS], starburst_sintab[N_POINTS];
@@ -319,6 +324,28 @@ static uint32_t next[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,
 void execute_line(unsigned i) {
 	if(!line_active[i]) return;
 
+	if (is_point[i]) {
+		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+		BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
+		BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+
+		spi(DAC_POS, pos_dac_x[i]);
+		spi(DAC_POS, pos_dac_y[i]);
+
+		four_microseconds();
+
+		// Unblank Z
+		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
+		delay(20); // This duration can be adjusted!
+
+		// Blank Z
+		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
+		return;
+	}
+
     setCoefficients( xcoeff[i], ycoeff[i] );
 
 	// Set either a high-crossing or low-crossing threshold at the limit DAC.
@@ -326,7 +353,6 @@ void execute_line(unsigned i) {
 
 	spi(DAC_LIMIT, limit_dac[i]);
 
-	// Position DAC has 2.5V range
 	spi(DAC_POS, pos_dac_x[i]); // TODO: These can be optimised to skip
 	spi(DAC_POS, pos_dac_y[i]); //       if the value does not change
 
@@ -623,11 +649,27 @@ int main(void) {
 		}
 	}
 
+	if(0) {
+		unsigned cnt = 0;
+#define LINE(x0,y0,x1,y1) if(!setup_line_int(cnt++, x0-1022, y0-1022, x1-1022, y1-1022, 0)) goto square;
+#include "/Users/toby/Documents/Electronics/vectors_v2/larsb-imlac/maze.c"
+
+		for(;;) {
+			for(unsigned i = 0; i < cnt; ++i) {
+				execute_line(i);
+			}
+		}
+	}
+
 	//  square test pattern
 
-	if(0) {
+	square:
+	if(1) {
+		// Benchmark, 4.7k integrating resistor, 816.8 fps (about 8,160 vectors/second)
+		// these are long vectors, about 6.5 divisions
+
 		// Note that X = 0 and Y = 0 correspond to Position DAC in mid-range, i.e. 1.25V
-		// DAC value = k*x0*0xfffu + 2048
+		// DAC value = k*x0*0xfffu + 2048      or, k = 2048/(4095 * abs(max_x_y))
 		// The addressable range of Position DAC is therefore
 		// -2048/(4095*k) .. (4095-2048)/(4095*k) ... if k = 1,   -0.5 .. +0.5
 		// The limit DAC (line endpoint, integrator stop) is intended to be in the same units
@@ -704,6 +746,27 @@ int main(void) {
 		}
 	}
 
+	// Circle test with points
+
+	if(0) {
+		unsigned i, n = 99;
+		double k = 0.4;
+		double a = 2*M_PI/n;
+		for(i = 0; i < n; ++i) {
+			if ((i % 4) == 0) {
+				setup_line(i, k, cos(a*i), sin(a*i), cos(a*i), sin(a*i), 0);
+			} else if ((i % 4) < 3) {
+				setup_line(i, k, cos(a*i), sin(a*i), cos(a*(i+1)), sin(a*(i+1)), 0);
+			}
+		}
+
+		for(;;) {
+			for(i = 0; i < n; ++i) {
+				execute_line(i);
+			}
+		}
+	}
+
 	// diagonal_test
 
 	if(0) {
@@ -734,7 +797,10 @@ int main(void) {
 		}
 	}
 
-	if(1) {
+	if(0) {
+		// Benchmark on this maze: with 2.2k integrating resistors, 96.45 fps -- quality is rough
+		//                              4.7k, 89.41 fps -- acceptable quality (15,825 vectors/second)
+
 		double k = 0.0008;
 
 		setup_line(0,k,-565.3181818181818,618.5454545454545,-565.3181818181818,-297.8181818181818,0);
@@ -923,6 +989,8 @@ int main(void) {
 		}
 	}
 
+	// Order 4 graph enumeration
+
 	if(0) {
 		double k = 0.0005;
 
@@ -984,6 +1052,8 @@ int main(void) {
 			}
 		}
 	}
+
+	// Order 5 graph enumeration
 
 	if(0) {
 		double k = 0.0006;
