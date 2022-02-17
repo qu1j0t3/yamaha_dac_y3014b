@@ -254,9 +254,9 @@ unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t das
 
 		line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
 
-		int limit_fudge = 20; // This can be calibrated using the limit vs position test pattern below
+		int limit_fudge = 2; // This can be calibrated using the limit vs position test pattern below
 		int delta = (line_limit_low[i] ? 1 : -1) * (abs(larger_delta)+limit_fudge) / 2;
-		uint16_t limit = 2048 - delta;
+		int limit = 2048 - delta;
 
 		// While the limit DAC can use almost the whole range between 0 and 5V (with integrator "zero" at 2.5V),
 		// the integrators themselves cannot reach these limits. We therefore need to clamp the limit DAC
@@ -361,11 +361,11 @@ void execute_line(unsigned i) {
 
 
 	if (pos_dac_x[i] != last_pos_x) {
-		spi(DAC_POS, pos_dac_x[i]); // TODO: These can be optimised to skip
+		spi(DAC_POS, pos_dac_x[i]);
 		last_pos_x = pos_dac_x[i];
 	}
 	if (pos_dac_y[i] != last_pos_y) {
-		spi(DAC_POS, pos_dac_y[i]); //       if the value does not change
+		spi(DAC_POS, pos_dac_y[i]);
 		last_pos_y = pos_dac_y[i];
 	}
 
@@ -831,9 +831,10 @@ int main(void) {
 		}
 	}
 
-	if(0) {
+	if(1) {
 		// Benchmark on this maze: with 2.2k integrating resistors, 96.45 fps -- quality is rough
 		//                              4.7k, 89.41 fps -- acceptable quality (15,825 vectors/second)
+		//                              10k, 79.36 fps
 
 		double k = 0.0008;
 
