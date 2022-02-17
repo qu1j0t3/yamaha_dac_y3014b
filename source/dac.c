@@ -223,13 +223,16 @@ uint16_t line_limit_x[DISPLAY_LIST_MAX],
 		 line_limit_low[DISPLAY_LIST_MAX],
 		 line_active[DISPLAY_LIST_MAX],
 		 is_point[DISPLAY_LIST_MAX];
+uint16_t last_pos_x, last_pos_y;
 
 unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash) {
 	int dx = x1-x0, dy = y1-y0, posx, posy;
 	double len = sqrt((double)dx*(double)dx + (double)dy*(double)dy);
 
 	// treat very short lines as points (since crt cannot resolve anyway)
-	is_point[i] = len < 5.0;
+	// can be calibrated using short lines test pattern below
+	// at some point around length 7 units, lines start to lose brightness
+	is_point[i] = len < 8.0;
 
 	if (is_point[i]) {
 		posx = 2048 - (x0+x1)/2;
@@ -251,7 +254,8 @@ unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t das
 
 		line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
 
-		int delta = (line_limit_low[i] ? 1 : -1) * (abs(larger_delta)+2) / 2;
+		int limit_fudge = 20; // This can be calibrated using the limit vs position test pattern below
+		int delta = (line_limit_low[i] ? 1 : -1) * (abs(larger_delta)+limit_fudge) / 2;
 		uint16_t limit = 2048 - delta;
 
 		// While the limit DAC can use almost the whole range between 0 and 5V (with integrator "zero" at 2.5V),
@@ -331,7 +335,9 @@ void execute_line(unsigned i) {
 		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
 
 		spi(DAC_POS, pos_dac_x[i]);
+		last_pos_x = pos_dac_x[i];
 		spi(DAC_POS, pos_dac_y[i]);
+		last_pos_y = pos_dac_y[i];
 
 		four_microseconds();
 
@@ -353,8 +359,15 @@ void execute_line(unsigned i) {
 
 	spi(DAC_LIMIT, limit_dac[i]);
 
-	spi(DAC_POS, pos_dac_x[i]); // TODO: These can be optimised to skip
-	spi(DAC_POS, pos_dac_y[i]); //       if the value does not change
+
+	if (pos_dac_x[i] != last_pos_x) {
+		spi(DAC_POS, pos_dac_x[i]); // TODO: These can be optimised to skip
+		last_pos_x = pos_dac_x[i];
+	}
+	if (pos_dac_y[i] != last_pos_y) {
+		spi(DAC_POS, pos_dac_y[i]); //       if the value does not change
+		last_pos_y = pos_dac_y[i];
+	}
 
 	four_microseconds(); // just one of these calls isn't quite enough
 	four_microseconds();
@@ -649,7 +662,7 @@ int main(void) {
 		}
 	}
 
-	if(1) {
+	if(0) {
 		unsigned cnt = 0;
 #define LINE(x0,y0,x1,y1) if(!setup_line_int(cnt++, 2*(x0-1022), 2*(y0-1022), 2*(x1-1022), 2*(y1-1022), 0)) goto square;
 #include "/Users/toby/Documents/Electronics/vectors_v2/larsb-imlac/maze.c"
@@ -664,7 +677,7 @@ int main(void) {
 	//  square test pattern
 
 	square:
-	if(1) {
+	if(0) {
 		// Benchmark, 4.7k integrating resistor, 816.8 fps (about 8,160 vectors/second)
 		// these are long vectors, about 6.5 divisions
 
@@ -727,6 +740,27 @@ int main(void) {
 			execute_line(3);
 			execute_line(4);
 		}
+	}
+
+	// Short lines and position vs limit test pattern
+
+	if(1) {
+		int i, j = 0, x = -1500, y = -1500;
+		for(i = 0; i <= 100; ++i) {
+			setup_line_int(j++, x, y+i*30, x+i, y+i*30, 0);
+		}
+		for(i = 1; i <= 10; ++i) {
+			setup_line_int(j++, x+200,       y+i*300,     x+200+i*300, y+i*300,     0);
+			setup_line_int(j++, x+200+i*300, y+i*300-100, x+200+i*300, y+i*300+100, 0);
+
+			setup_line_int(j++, x+400+i*300, y,     x+400+i*300, y+i*300,     0);
+			setup_line_int(j++, x+300+i*300, y+i*300, x+500+i*300, y+i*300, 0);
+		}
+
+		for(;;)
+			for(i = 0; i < j; ++i) {
+				execute_line(i);
+			}
 	}
 
 	// Circle test
@@ -1293,6 +1327,7 @@ int main(void) {
 		}*/
 		BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 		for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
+			// TODO: Try shuffling the lines randomly as a DAC stress test
 			execute_line(i);
     		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 		}
