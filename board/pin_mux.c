@@ -21,7 +21,7 @@ pin_labels:
 - {pin_num: '61', pin_signal: PTA1/KBI0_P1/FTM0_CH1/I2C0_4WSDAOUT/ACMP0_IN1/ADC0_SE1, label: 'J1[10]/PTA1_D4_T1/PTA1_IRRX', identifier: IRRX;NOTCS_DAC_LIMIT;NOTCS_DAC_1}
 - {pin_num: '1', pin_signal: PTD1/KBI0_P25/FTM2_CH3/SPI1_MOSI, label: 'J1[12]/PTD1_D5_PWM3'}
 - {pin_num: '23', pin_signal: PTB4/KBI0_P12/FTM2_CH4/SPI0_MISO/ACMP1_IN2/NMI_b, label: 'J1[14]/J2[10]/PTB4_D6_PWM4', identifier: STOP;LIMIT_LOW}
-- {pin_num: '45', pin_signal: PTA7/KBI0_P7/FTM2_FLT2/ACMP1_IN1/ADC0_SE3, label: 'J1[16]/J2[17]/PTA7_D7_ANB1'}
+- {pin_num: '45', pin_signal: PTA7/KBI0_P7/FTM2_FLT2/ACMP1_IN1/ADC0_SE3, label: 'J1[16]/J2[17]/PTA7_D7_ANB1', identifier: NOTCS_DAC_Z}
 - {pin_num: '62', pin_signal: PTA0/KBI0_P0/FTM0_CH0/I2C0_4WSCLOUT/ACMP0_IN0/ADC0_SE0, label: 'J2[2]/PTA0_D8_T0', identifier: NOTCS_DAC_POS;NOTCS_DAC_0}
 - {pin_num: '19', pin_signal: PTH0/KBI1_P24/FTM2_CH0, label: 'J2[4]/PTH0_D9_PWM0', identifier: LIMIT_LOW}
 - {pin_num: '22', pin_signal: PTB5/KBI0_P13/FTM2_CH5/SPI0_PCS/ACMP1_OUT, label: 'J2[6]/PTB5_D10_PWM5', identifier: Y_COMP_SEL}
@@ -139,6 +139,7 @@ BOARD_InitPins:
   - {pin_num: '22', peripheral: GPIOA, signal: 'GPIO, 13', pin_signal: PTB5/KBI0_P13/FTM2_CH5/SPI0_PCS/ACMP1_OUT, direction: OUTPUT}
   - {pin_num: '40', peripheral: GPIOA, signal: 'GPIO, 10', pin_signal: PTB2/KBI0_P10/SPI0_SCK/FTM0_CH0/ADC0_SE6, identifier: STOP, direction: INPUT}
   - {pin_num: '19', peripheral: GPIOB, signal: 'GPIO, 24', pin_signal: PTH0/KBI1_P24/FTM2_CH0, direction: OUTPUT}
+  - {pin_num: '45', peripheral: GPIOA, signal: 'GPIO, 7', pin_signal: PTA7/KBI0_P7/FTM2_FLT2/ACMP1_IN1/ADC0_SE3, direction: OUTPUT}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 /* clang-format on */
@@ -165,6 +166,13 @@ void BOARD_InitPins(void)
     };
     /* Initialize GPIO functionality on pin PTA1 (pin 61) */
     GPIO_PinInit(BOARD_INITPINS_NOTCS_DAC_1_GPIO_PORT, BOARD_INITPINS_NOTCS_DAC_1_PIN, &NOTCS_DAC_1_config);
+
+    gpio_pin_config_t NOTCS_DAC_Z_config = {
+        .pinDirection = kGPIO_DigitalOutput,
+        .outputLogic = 0U
+    };
+    /* Initialize GPIO functionality on pin PTA7 (pin 45) */
+    GPIO_PinInit(BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PORT, BOARD_INITPINS_NOTCS_DAC_Z_PIN, &NOTCS_DAC_Z_config);
 
     gpio_pin_config_t STOP_config = {
         .pinDirection = kGPIO_DigitalInput,

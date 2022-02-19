@@ -295,6 +295,21 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_LIMIT_LOW_PIN_MASK (1U << 0U)      /*!<@brief PORT pin mask */
                                                           /* @} */
 
+/*! @name PORTA7 (number 45), J1[16]/J2[17]/PTA7_D7_ANB1
+  @{ */
+
+/* Symbols to be used with GPIO driver */
+#define BOARD_INITPINS_NOTCS_DAC_Z_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_Z_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PORT kGPIO_PORTA    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK (1U << 7U) /*!<@brief GPIO pin mask */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_NOTCS_DAC_Z_PORT PORTA               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_NOTCS_DAC_Z_PIN 7U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_NOTCS_DAC_Z_PIN_MASK (1U << 7U)      /*!<@brief PORT pin mask */
+                                                            /* @} */
+
 /*!
  * @brief Configures pin routing and optionally pin electrical features.
  *

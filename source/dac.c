@@ -121,9 +121,12 @@ uint32_t dac_encode(double coeff) {
 // chip select
 #define DAC_LIMIT  0
 #define DAC_POS    1
+#define DAC_Z      2
+
 // units
 #define DAC_A      0
 #define DAC_B      (1u << 15)
+
 // control
 #define DAC_BUFFERED (1u << 14)
 #define DAC_GAINx2   0
@@ -139,10 +142,12 @@ void spi(unsigned cs, uint16_t word) {
 	// 11..0     : data
 
 	// Select chip
-	if (cs) {
+	if (cs == 1) {
 		BOARD_INITPINS_NOTCS_DAC_1_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
-	} else {
+	} else if (cs == 0){
 		BOARD_INITPINS_NOTCS_DAC_0_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
+	} else if (cs == 2) {
+		BOARD_INITPINS_NOTCS_DAC_Z_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
 	}
 
 	// Bit-bang SPI
@@ -159,6 +164,7 @@ void spi(unsigned cs, uint16_t word) {
 	// Deselect chip (and also latch DAC data when NOT_LDAC is tied low)
 	BOARD_INITPINS_NOTCS_DAC_1_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
 	BOARD_INITPINS_NOTCS_DAC_0_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
+	BOARD_INITPINS_NOTCS_DAC_Z_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
 
 	// Without this delay, making an immediate next call to set unit B will fail (DAC won't latch)
 	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
@@ -217,15 +223,24 @@ double wrapy(unsigned i) {
 
 #define DISPLAY_LIST_MAX 300
 
+#define MAX_Z_LEVEL 0xfffu
+
 uint32_t xcoeff[DISPLAY_LIST_MAX], ycoeff[DISPLAY_LIST_MAX], line_dash[DISPLAY_LIST_MAX];
 uint16_t pos_dac_x[DISPLAY_LIST_MAX], pos_dac_y[DISPLAY_LIST_MAX], limit_dac[DISPLAY_LIST_MAX];
 uint16_t line_limit_x[DISPLAY_LIST_MAX],
 		 line_limit_low[DISPLAY_LIST_MAX],
 		 line_active[DISPLAY_LIST_MAX],
-		 is_point[DISPLAY_LIST_MAX];
-uint16_t last_pos_x, last_pos_y;
+		 is_point[DISPLAY_LIST_MAX],
+		 line_z_dac[DISPLAY_LIST_MAX];
+uint16_t last_pos_x, last_pos_y, last_z = 0;
 
-unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash) {
+/*
+ * Parameters:  x0, y0, x1, y1 : line endpoints; range from -2047 to +2048
+ *              dash           : 30 bits of dash pattern; zero for solid line
+ *              zlevel         : Z intensity level from 0 (lowest) to 4095 (highest)
+                                 but hardware has 8 bit precision
+ */
+unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel) {
 	int dx = x1-x0, dy = y1-y0, posx, posy;
 	double len = sqrt((double)dx*(double)dx + (double)dy*(double)dy);
 
@@ -233,6 +248,7 @@ unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t das
 	// can be calibrated using short lines test pattern below
 	// at some point around length 7 units, lines start to lose brightness
 	is_point[i] = len < 8.0;
+	line_z_dac[i] = DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | zlevel;
 
 	if (is_point[i]) {
 		posx = 2048 - (x0+x1)/2;
@@ -286,7 +302,7 @@ unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t das
 // Assumes data is centred on (0,0); k factor will scale input coordinates to -0.5 .. +0.5
 unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, double y1, uint32_t dash) {
 	k *= 0xfff; // scale to position DAC units
-	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), dash);
+	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), dash, MAX_Z_LEVEL);
 }
 
 double starburst_costab[N_POINTS], starburst_sintab[N_POINTS];
@@ -323,10 +339,15 @@ void update_display_list(double k) {
 
 // Modulo is quite slow on this processor, so use an
 // array lookup as a fast but constant time "mod 30"
-static uint32_t next[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,0};
+static uint8_t next[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,0};
 
 void execute_line(unsigned i) {
 	if(!line_active[i]) return;
+
+	if (line_z_dac[i] != last_z) {
+		spi(DAC_Z, line_z_dac[i]);
+		last_z = line_z_dac[i];
+	}
 
 	if (is_point[i]) {
 		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
@@ -664,7 +685,7 @@ int main(void) {
 
 	if(0) {
 		unsigned cnt = 0;
-#define LINE(x0,y0,x1,y1) if(!setup_line_int(cnt++, 2*(x0-1022), 2*(y0-1022), 2*(x1-1022), 2*(y1-1022), 0)) goto square;
+#define LINE(x0,y0,x1,y1) if(!setup_line_int(cnt++, 2*(x0-1022), 2*(y0-1022), 2*(x1-1022), 2*(y1-1022), 0, MAX_Z_LEVEL)) goto square;
 #include "/Users/toby/Documents/Electronics/vectors_v2/larsb-imlac/maze.c"
 
 		for(;;) {
@@ -745,22 +766,25 @@ int main(void) {
 	// Short lines and position vs limit test pattern
 
 	if(1) {
-		int i, j = 0, x = -1500, y = -1500;
+		int i, j = 0, x = -2000, y = -2000;
 		for(i = 0; i <= 100; ++i) {
-			setup_line_int(j++, x, y+i*30, x+i, y+i*30, 0);
+			setup_line_int(j++, x, y+i*30, x+i, y+i*30, 0, MAX_Z_LEVEL);
+			setup_line_int(j++, x+3800, y+i*30, x+3900, y+i*30, 0, (4095*i)/100);
 		}
 		for(i = 1; i <= 10; ++i) {
-			setup_line_int(j++, x+200,       y+i*300,     x+200+i*300, y+i*300,     0);
-			setup_line_int(j++, x+200+i*300, y+i*300-100, x+200+i*300, y+i*300+100, 0);
+			setup_line_int(j++, x+200,       y+i*300,     x+200+i*300, y+i*300,     0, MAX_Z_LEVEL);
+			setup_line_int(j++, x+200+i*300, y+i*300-100, x+200+i*300, y+i*300+100, 0, MAX_Z_LEVEL);
 
-			setup_line_int(j++, x+400+i*300, y,     x+400+i*300, y+i*300,     0);
-			setup_line_int(j++, x+300+i*300, y+i*300, x+500+i*300, y+i*300, 0);
+			setup_line_int(j++, x+400+i*300, y,     x+400+i*300, y+i*300,     0, MAX_Z_LEVEL);
+			setup_line_int(j++, x+300+i*300, y+i*300, x+500+i*300, y+i*300, 0, MAX_Z_LEVEL);
 		}
 
-		for(;;)
+		for(;;) {
+			BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 			for(i = 0; i < j; ++i) {
 				execute_line(i);
 			}
+		}
 	}
 
 	// Circle test
@@ -1308,8 +1332,6 @@ int main(void) {
 				execute_line(i);
 			}
 		}
-
-
 	}
 
 	// FLAG test
