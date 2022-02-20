@@ -124,12 +124,13 @@ uint32_t dac_encode(double coeff) {
 #define DAC_Z      2
 
 // units
-#define DAC_A      0
+#define DAC_A      0u
 #define DAC_B      (1u << 15)
 
 // control
 #define DAC_BUFFERED (1u << 14)
-#define DAC_GAINx2   0
+#define DAC_UNBUFFERED 0u
+#define DAC_GAINx2   0u
 #define DAC_GAINx1   (1u << 13)
 #define DAC_ACTIVE   (1u << 12)
 
@@ -142,10 +143,10 @@ void spi(unsigned cs, uint16_t word) {
 	// 11..0     : data
 
 	// Select chip
-	if (cs == 1) {
-		BOARD_INITPINS_NOTCS_DAC_1_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
-	} else if (cs == 0){
+	if (cs == 0){
 		BOARD_INITPINS_NOTCS_DAC_0_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
+	} else if (cs == 1) {
+		BOARD_INITPINS_NOTCS_DAC_1_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
 	} else if (cs == 2) {
 		BOARD_INITPINS_NOTCS_DAC_Z_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
 	}
@@ -232,7 +233,32 @@ uint16_t line_limit_x[DISPLAY_LIST_MAX],
 		 line_active[DISPLAY_LIST_MAX],
 		 is_point[DISPLAY_LIST_MAX],
 		 line_z_dac[DISPLAY_LIST_MAX];
-uint16_t last_pos_x, last_pos_y, last_z = 0;
+
+int compar_func(const void *pa, const void *pb) {
+	uint16_t a = *(const uint16_t*)pa;
+	uint16_t b = *(const uint16_t*)pb;
+
+	// sort lines left to right by X starting position
+	int sign = (pos_dac_x[a] & 0xfff) - (pos_dac_x[b] & 0xfff);
+	return sign ? sign : (
+		// Then sort by Y
+		(pos_dac_y[a] & 0xfff) - (pos_dac_y[b] & 0xfff)
+	);
+}
+
+void sort_display_list(uint16_t count, uint16_t perm[]) {
+	qsort(perm, count, sizeof(perm[0]), compar_func);
+}
+
+void shuffle_display_list(uint16_t count, uint16_t perm[]) {
+	for(unsigned n = count; n > 1;) {
+		unsigned chosen = (uint16_t)rand() % n;
+		--n;
+		uint16_t temp = perm[n];
+		perm[n] = perm[chosen];
+		perm[chosen] = temp;
+	}
+}
 
 /*
  * Parameters:  x0, y0, x1, y1 : line endpoints; range from -2047 to +2048
@@ -240,7 +266,8 @@ uint16_t last_pos_x, last_pos_y, last_z = 0;
  *              zlevel         : Z intensity level from 0 (lowest) to 4095 (highest)
                                  but hardware has 8 bit precision
  */
-unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel) {
+
+unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel) {
 	int dx = x1-x0, dy = y1-y0, posx, posy;
 	double len = sqrt((double)dx*(double)dx + (double)dy*(double)dy);
 
@@ -270,9 +297,16 @@ unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t das
 
 		line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
 
-		int limit_fudge = 2; // This can be calibrated using the limit vs position test pattern below
-		int delta = (line_limit_low[i] ? 1 : -1) * (abs(larger_delta)+limit_fudge) / 2;
-		int limit = 2048 - delta;
+		uint16_t limit_fudge = 2; // This can be calibrated using the limit vs position test pattern below
+		uint16_t delta = (uint16_t)(abs(larger_delta)+limit_fudge) / 2;
+		uint16_t clamp;
+		if (line_limit_low[i]) {
+			// limit = 2048 - delta
+			clamp = delta > 2048 ? 0 : 2048 - delta;
+		} else {
+			// limit = 2048 + delta
+			clamp = delta > 2047 ? 4095 : 2048 + delta;
+		}
 
 		// While the limit DAC can use almost the whole range between 0 and 5V (with integrator "zero" at 2.5V),
 		// the integrators themselves cannot reach these limits. We therefore need to clamp the limit DAC
@@ -288,7 +322,7 @@ unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t das
 		int32_t limit_min = (int32_t)( (0.05/5.0)*0xfffu );
 		uint16_t clamped = limit; //(uint16_t)( limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit) );*/
 
-		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | limit );
+		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamp );
 	}
 
 	pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)posx;
@@ -299,10 +333,27 @@ unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t das
 	return line_active[i] = posx >= 0 && posx < 0x1000 && posy >= 0 && posy < 0x1000;
 }
 
+unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel) {
+	// This higher level call will try to position line in a normalised direction (X increasing, Y increasing)
+	// and if that leads to a starting position outside DAC limits,
+	// will then try to place line reversed (which is probably not so good for display list sorting
+	// but necessary to have the partial line rendered at all).
+	if (x0 > x1) {
+		return setup_line_int_(i, x1, y1, x0, y0, dash, zlevel)
+				|| setup_line_int_(i, x0, y0, x1, y1, dash, zlevel);
+	}
+	return setup_line_int_(i, x0, y0, x1, y1, dash, zlevel)
+			|| setup_line_int_(i, x1, y1, x0, y0, dash, zlevel);
+}
+
 // Assumes data is centred on (0,0); k factor will scale input coordinates to -0.5 .. +0.5
 unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, double y1, uint32_t dash) {
 	k *= 0xfff; // scale to position DAC units
 	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), dash, MAX_Z_LEVEL);
+}
+unsigned setup_line_dim(unsigned i, double k, double x0, double y0, double x1, double y1) {
+	k *= 0xfff; // scale to position DAC units
+	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), 0, MAX_Z_LEVEL*95/100);
 }
 
 double starburst_costab[N_POINTS], starburst_sintab[N_POINTS];
@@ -342,6 +393,8 @@ void update_display_list(double k) {
 static uint8_t next[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,0};
 
 void execute_line(unsigned i) {
+	static uint16_t last_pos_x, last_pos_y, last_z;
+
 	if(!line_active[i]) return;
 
 	if (line_z_dac[i] != last_z) {
@@ -373,14 +426,8 @@ void execute_line(unsigned i) {
 		return;
 	}
 
-    setCoefficients( xcoeff[i], ycoeff[i] );
-
-	// Set either a high-crossing or low-crossing threshold at the limit DAC.
-	// If limitlow[i] is set, it means we must invert the comparator output
-
-	spi(DAC_LIMIT, limit_dac[i]);
-
-
+	// These DACs require plenty of settling time,
+	// so set them first. TODO: measure the rate of settling
 	if (pos_dac_x[i] != last_pos_x) {
 		spi(DAC_POS, pos_dac_x[i]);
 		last_pos_x = pos_dac_x[i];
@@ -390,8 +437,26 @@ void execute_line(unsigned i) {
 		last_pos_y = pos_dac_y[i];
 	}
 
-	four_microseconds(); // just one of these calls isn't quite enough
-	four_microseconds();
+	// Set either a high-crossing or low-crossing threshold at the limit DAC.
+	// If limitlow[i] is set, it means we must invert the comparator output
+	spi(DAC_LIMIT, limit_dac[i]);
+
+	// TODO: There is an interesting issue here.
+	//       If we set up the integrators so that they are SLOWER than the DAC slew...
+	//       DAC output amp is rated at slew 0.55 V/µs which is much faster than integrators at 10k+10n
+	//       Maximum integrator speed in one axis is coefficient 1.0.
+	//       One integrator will always be > sqrt(2)/2 due to unit vector normalisation.
+	//       then we prevent the situation where a line ends before DAC has settled.
+	//       Also: Look into buffered vs unbuffered settling time.
+
+    setCoefficients( xcoeff[i], ycoeff[i] );
+
+    // Be cautious, the display loop may hang if we don't wait
+    // for the coefficients to settle sufficiently. This could be data dependent.
+
+	//four_microseconds(); // MAY NEED SOME DELAY
+	//four_microseconds();
+	//four_microseconds();
 
     if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
@@ -717,11 +782,11 @@ int main(void) {
 		setup_line(3, k, -.5, +.5, -.5, -.5, 0);
 
 		setup_line(4, k, -.5, -.4, +.5, -.4, dash);
-		//setup_line(5, k, -.5, +.4, +.5, +.4);
+		setup_line_dim(5, k, -.5, +.4, +.5, +.4);
 		setup_line(6, k, -.5, 0, +.5, 0, dash2);
 		setup_line(7, k, 0, -.5, 0, +.5, dash2);
 		setup_line(8, k, -.4, -.5, -.4, +.5, dash);
-		//setup_line(9, k, +.4, -.5, +.4, +.5);
+		setup_line_dim(9, k, +.4, -.5, +.4, +.5);
 		setup_line(10, k, -.25, -.25, +.25, +.25, 0);
 		setup_line(11, k, -.25, +.25, +.25, -.25, 0);
 
@@ -765,22 +830,24 @@ int main(void) {
 
 	// Short lines and position vs limit test pattern
 
-	if(1) {
-		int i, j = 0, x = -2000, y = -2000;
+	if(0) {
+		unsigned i, j = 0;
+		int x = -2000, y = -2000;
+		for(i = 0; i <= 100; ++i) {
+			setup_line_int(j++, x+3800, y+i*30, x+3900+50*((i % 10) == 0), y+i*30, 0, (4095*i)/100);
+		}
 		for(i = 0; i <= 100; ++i) {
 			setup_line_int(j++, x, y+i*30, x+i, y+i*30, 0, MAX_Z_LEVEL);
-			setup_line_int(j++, x+3800, y+i*30, x+3900, y+i*30, 0, (4095*i)/100);
 		}
 		for(i = 1; i <= 10; ++i) {
 			setup_line_int(j++, x+200,       y+i*300,     x+200+i*300, y+i*300,     0, MAX_Z_LEVEL);
 			setup_line_int(j++, x+200+i*300, y+i*300-100, x+200+i*300, y+i*300+100, 0, MAX_Z_LEVEL);
 
-			setup_line_int(j++, x+400+i*300, y,     x+400+i*300, y+i*300,     0, MAX_Z_LEVEL);
+			setup_line_int(j++, x+400+i*300, y,       x+400+i*300, y+i*300, 0, MAX_Z_LEVEL);
 			setup_line_int(j++, x+300+i*300, y+i*300, x+500+i*300, y+i*300, 0, MAX_Z_LEVEL);
 		}
 
 		for(;;) {
-			BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 			for(i = 0; i < j; ++i) {
 				execute_line(i);
 			}
@@ -855,7 +922,102 @@ int main(void) {
 		}
 	}
 
-	if(1) {
+	if(0) {
+		// 12 x 12 maze
+
+		double k = 0.0008;
+		setup_line(0,k,-591.5,540.0,-591.5,-324.0,0);
+		setup_line(1,k,272.5,540.0,-591.5,540.0,0);
+		setup_line(2,k,272.5,-324.0,272.5,540.0,0);
+		setup_line(3,k,-591.5,-324.0,272.5,-324.0,0);
+		setup_line(4,k,128.5,-108.0,128.5,-252.0,0);
+		setup_line(5,k,128.5,36.0,272.5,36.0,0);
+		setup_line(6,k,-375.5,-108.0,-15.5,-108.0,0);
+		setup_line(7,k,-375.5,-180.0,-375.5,-108.0,0);
+		setup_line(8,k,-591.5,-180.0,-375.5,-180.0,0);
+		setup_line(9,k,-159.5,108.0,56.5,108.0,0);
+		setup_line(10,k,-159.5,180.0,-159.5,108.0,0);
+		setup_line(11,k,-303.5,180.0,-159.5,180.0,0);
+		setup_line(12,k,-303.5,-36.0,-303.5,180.0,0);
+		setup_line(13,k,-519.5,-36.0,-303.5,-36.0,0);
+		setup_line(14,k,-519.5,108.0,-519.5,-36.0,0);
+		setup_line(15,k,-375.5,108.0,-519.5,108.0,0);
+		setup_line(16,k,128.5,324.0,128.5,180.0,0);
+		setup_line(17,k,-231.5,324.0,128.5,324.0,0);
+		setup_line(18,k,-231.5,396.0,-231.5,324.0,0);
+		setup_line(19,k,-303.5,396.0,-231.5,396.0,0);
+		setup_line(20,k,-303.5,468.0,-303.5,396.0,0);
+		setup_line(21,k,-447.5,252.0,-447.5,324.0,0);
+		setup_line(22,k,-375.5,252.0,-447.5,252.0,0);
+		setup_line(23,k,-375.5,36.0,-375.5,252.0,0);
+		setup_line(24,k,-447.5,36.0,-375.5,36.0,0);
+		setup_line(25,k,-159.5,396.0,-87.5,396.0,0);
+		setup_line(26,k,-159.5,468.0,-159.5,396.0,0);
+		setup_line(27,k,-375.5,468.0,-159.5,468.0,0);
+		setup_line(28,k,-87.5,468.0,-87.5,540.0,0);
+		setup_line(29,k,-15.5,468.0,-87.5,468.0,0);
+		setup_line(30,k,-15.5,396.0,-15.5,468.0,0);
+		setup_line(31,k,128.5,-36.0,128.5,108.0,0);
+		setup_line(32,k,56.5,-36.0,128.5,-36.0,0);
+		setup_line(33,k,56.5,180.0,56.5,-36.0,0);
+		setup_line(34,k,200.5,180.0,56.5,180.0,0);
+		setup_line(35,k,200.5,108.0,200.5,180.0,0);
+		setup_line(36,k,-231.5,-180.0,-231.5,-108.0,0);
+		setup_line(37,k,-15.5,36.0,-231.5,36.0,0);
+		setup_line(38,k,-15.5,-180.0,-15.5,36.0,0);
+		setup_line(39,k,56.5,-180.0,-15.5,-180.0,0);
+		setup_line(40,k,56.5,-252.0,56.5,-180.0,0);
+		setup_line(41,k,200.5,-252.0,56.5,-252.0,0);
+		setup_line(42,k,-159.5,-36.0,-159.5,-108.0,0);
+		setup_line(43,k,-87.5,-36.0,-159.5,-36.0,0);
+		setup_line(44,k,200.5,-108.0,56.5,-108.0,0);
+		setup_line(45,k,200.5,-36.0,200.5,-108.0,0);
+		setup_line(46,k,-519.5,-252.0,-519.5,-324.0,0);
+		setup_line(47,k,-159.5,-252.0,-519.5,-252.0,0);
+		setup_line(48,k,-159.5,-180.0,-159.5,-252.0,0);
+		setup_line(49,k,-87.5,-180.0,-159.5,-180.0,0);
+		setup_line(50,k,-87.5,-252.0,-87.5,-180.0,0);
+		setup_line(51,k,-15.5,-252.0,-87.5,-252.0,0);
+		setup_line(52,k,128.5,396.0,272.5,396.0,0);
+		setup_line(53,k,-447.5,468.0,-447.5,396.0,0);
+		setup_line(54,k,-519.5,468.0,-447.5,468.0,0);
+		setup_line(55,k,-519.5,396.0,-519.5,180.0,0);
+		setup_line(56,k,-375.5,396.0,-519.5,396.0,0);
+		setup_line(57,k,-375.5,324.0,-375.5,396.0,0);
+		setup_line(58,k,-303.5,324.0,-375.5,324.0,0);
+		setup_line(59,k,-303.5,252.0,-303.5,324.0,0);
+		setup_line(60,k,-87.5,252.0,-303.5,252.0,0);
+		setup_line(61,k,-87.5,180.0,-87.5,252.0,0);
+		setup_line(62,k,-15.5,180.0,-87.5,180.0,0);
+		setup_line(63,k,-15.5,252.0,-15.5,180.0,0);
+		setup_line(64,k,56.5,252.0,-15.5,252.0,0);
+		setup_line(65,k,200.5,252.0,200.5,396.0,0);
+		setup_line(66,k,200.5,-180.0,272.5,-180.0,0);
+		setup_line(67,k,-231.5,-36.0,-231.5,108.0,0);
+		setup_line(68,k,-519.5,-108.0,-519.5,-180.0,0);
+		setup_line(69,k,56.5,468.0,56.5,324.0,0);
+		setup_line(70,k,200.5,468.0,56.5,468.0,0);
+		setup_line(71,k,-447.5,180.0,-591.5,180.0,0);
+		setup_line(72,k,-303.5,-180.0,-303.5,-252.0,0);
+		setup_line(73,k,-447.5,-108.0,-447.5,-36.0,0);
+
+		// Sorting the display list can help speed up DAC settling
+		// but really we shouldn't depend on it.
+		uint16_t perm[74];
+		for(unsigned i = 0; i < 74; ++i) {
+			perm[i] = i;
+		}
+		//shuffle_display_list(74, perm);
+		sort_display_list(74, perm);
+
+		for(;;) {
+			for(unsigned i = 0; i < 74; ++i) {
+				execute_line(perm[i]);
+			}
+		}
+	}
+
+	if(0) {
 		// Benchmark on this maze: with 2.2k integrating resistors, 96.45 fps -- quality is rough
 		//                              4.7k, 89.41 fps -- acceptable quality (15,825 vectors/second)
 		//                              10k, 79.36 fps
@@ -1040,7 +1202,13 @@ int main(void) {
 		setup_line(175,k,-244.590909090909,572.7272727272727,-290.4090909090908,572.7272727272727,0);
 		setup_line(176,k,-244.590909090909,526.909090909091,-244.590909090909,572.7272727272727,0);
 
-		BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
+		uint16_t perm[177];
+		for(unsigned i = 0; i < 177; ++i) {
+			perm[i] = i;
+		}
+		//shuffle_display_list(177, perm);
+		sort_display_list(177, perm);
+
 		for(;;) {
 			for(unsigned i = 0; i < 177; ++i) {
 				execute_line(i);
@@ -1103,8 +1271,6 @@ int main(void) {
 		setup_line(47,k,-652.0,669.6,-648.0,665.6,0);
 		setup_line(48,k,-652.0,665.6,-648.0,669.6,0);
 
-
-		BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 		for(;;) {
 			for(unsigned i = 0; i < 49; ++i) {
 				execute_line(i);
@@ -1325,8 +1491,6 @@ int main(void) {
 		setup_line(206,k,-563.9738294386959,706.0614208909972,-559.9738294386959,702.0614208909972,0);
 		setup_line(207,k,-563.9738294386959,702.0614208909972,-559.9738294386959,706.0614208909972,0);
 
-
-		BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 		for(;;) {
 			for(unsigned i = 0; i < 208; ++i) {
 				execute_line(i);
@@ -1348,11 +1512,9 @@ int main(void) {
 			k = g ? k*1.08 : 0.0002;
 			update_display_list(k);
 		}*/
-		BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 		for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
 			// TODO: Try shuffling the lines randomly as a DAC stress test
 			execute_line(i);
-    		BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 		}
 	}
 
