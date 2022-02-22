@@ -246,7 +246,7 @@ int compar_func(const void *pa, const void *pb) {
 	);
 }
 
-void sort_display_list(uint16_t count, uint16_t perm[]) {
+void sort_display_list(unsigned count, uint16_t perm[]) {
 	qsort(perm, count, sizeof(perm[0]), compar_func);
 }
 
@@ -334,14 +334,14 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 }
 
 unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel) {
-	// This higher level call will try to position line in a normalised direction (X increasing, Y increasing)
+	/* This higher level call will try to position line in a normalised direction (X increasing, Y increasing)
 	// and if that leads to a starting position outside DAC limits,
 	// will then try to place line reversed (which is probably not so good for display list sorting
 	// but necessary to have the partial line rendered at all).
 	if (x0 > x1) {
 		return setup_line_int_(i, x1, y1, x0, y0, dash, zlevel)
 				|| setup_line_int_(i, x0, y0, x1, y1, dash, zlevel);
-	}
+	}*/
 	return setup_line_int_(i, x0, y0, x1, y1, dash, zlevel)
 			|| setup_line_int_(i, x1, y1, x0, y0, dash, zlevel);
 }
@@ -354,38 +354,6 @@ unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, doubl
 unsigned setup_line_dim(unsigned i, double k, double x0, double y0, double x1, double y1) {
 	k *= 0xfff; // scale to position DAC units
 	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), 0, MAX_Z_LEVEL*95/100);
-}
-
-double starburst_costab[N_POINTS], starburst_sintab[N_POINTS];
-
-void update_display_list(double k) {
-	for(unsigned i = 1; i < (2*N_POINTS-3); ++i) {
-		double x0, y0, x1, y1, kk = k;
-
-		x0 = wrapx(i);   y0 = wrapy(i);
-		x1 = wrapx(i+1); y1 = wrapy(i+1);
-
-		/* starburst
-		if (i < N_POINTS-1) {
-			x0 = y0 = 0;
-			x1 = starburst_costab[i]; y1 = starburst_sintab[i];
-			kk = 0.2;
-		} else {
-			x0 = 30*starburst_costab[i - N_POINTS+1];
-			y0 = 30*starburst_sintab[i - N_POINTS+1];
-			x1 = 30*starburst_costab[i - N_POINTS+2];
-			y1 = 30*starburst_sintab[i - N_POINTS+2];
-		}*/
-
-
-		// Show line if either endpoint is within valid position range
-		// This is simpler than full clipping
-		if (setup_line(i, kk, x0, y0, x1, y1, 0)) {
-			;
-		} else if (setup_line(i, kk, x1, y1, x0, y0, 0)) {
-			;
-		}
-	}
 }
 
 // Modulo is quite slow on this processor, so use an
@@ -529,27 +497,6 @@ int main(void) {
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
     BOARD_InitLEDsPins();
-
-
-	double a = 2*M_PI/(N_POINTS-1);
-	for(int i = 0; i < N_POINTS; ++i) {
-		starburst_costab[i] = cos(a*i);
-		starburst_sintab[i] = sin(a*i);
-	}
-
-    uint32_t sintab[SINCOS_POINTS], costab[SINCOS_POINTS], limitx[SINCOS_POINTS], limitlow[SINCOS_POINTS];
-    double coeffmag[SINCOS_POINTS];
-
-    double k = 2*M_PI/SINCOS_POINTS;
-    for(int i = 0; i < SINCOS_POINTS; ++i) {
-    	double c = cos(i*k), s = sin(i*k);
-        costab[i] = dac_encode(c);
-        sintab[i] = dac_encode(s);
-        limitx[i] = fabs(c) > fabs(s); // set if X is faster changing integrator
-        limitlow[i] = limitx[i] ? c > 0 : s > 0; // set if the integrator is decreasing (coefficient positive)
-        coeffmag[i] = limitx[i] ? fabs(c) : fabs(s); // test purposes, we will use this to set a testing "distance" for limit DAC
-    }
-
 
 	BOARD_INITPINS_X_INT_HOLD_GPIO->PCOR = BOARD_INITPINS_X_INT_HOLD_GPIO_PIN_MASK;
 	BOARD_INITPINS_X_INT_RESET_GPIO->PCOR = BOARD_INITPINS_X_INT_RESET_GPIO_PIN_MASK;
@@ -808,10 +755,10 @@ int main(void) {
 
 	// Stars demo
 
-	if(1) {
+	if(0) {
 		for(unsigned frame = 0; ; ++frame) {
 			unsigned j;
-			if ((frame % 512) == 0) {
+			if ((frame % 1024) == 0) {
 				j = 0;
 				int square = 1500;
 				setup_line_int(j++, -square, -square,  square, -square, 0, MAX_Z_LEVEL);
@@ -819,10 +766,25 @@ int main(void) {
 				setup_line_int(j++,  square,  square, -square,  square, 0, MAX_Z_LEVEL);
 				setup_line_int(j++, -square,  square, -square, -square, 0, MAX_Z_LEVEL);
 
-				for(;j < 150;) {
-					int xx = (abs(rand()) % (square*2)) - square;
-					int yy = (abs(rand()) % (square*2)) - square;
-					setup_line_int(j++, xx, yy, xx, yy, 0, MAX_Z_LEVEL);
+				for(;j < 20;) {
+					if (1) { // lines
+						int a = (abs(rand()) % (square*2)) - square;
+						int b = (abs(rand()) % (square*2)) - square;
+						int c = (abs(rand()) % (square*2)) - square;
+						int d = (abs(rand()) % (square*2)) - square;
+						setup_line_int(j++, a, b, c, d, 0, MAX_Z_LEVEL);
+						// Marking line endpoints with a dot helps test
+						// position DACs against integrators and limit.
+						// FIXME: Right now this isn't good!! Longer lines at some angles do not meet endpoint
+						//        The worst are lines in the south east quadrant
+						//        A starburst might be a better test of angle dependent error
+						setup_line_int(j++, a, b, a, b, 0, MAX_Z_LEVEL);
+						setup_line_int(j++, c, d, c, d, 0, MAX_Z_LEVEL);
+					} else { // stars
+						int xx = (abs(rand()) % (square*2)) - square;
+						int yy = (abs(rand()) % (square*2)) - square;
+						setup_line_int(j++, xx, yy, xx, yy, 0, MAX_Z_LEVEL);
+					}
 				}
 
 				uint16_t perm[j];
@@ -919,6 +881,27 @@ int main(void) {
 
 		for(;;) {
 			for(i = 0; i < n; ++i) {
+				execute_line(i);
+			}
+		}
+	}
+
+	// Starburst
+
+	if(1) {
+		unsigned i, j = 0, n = 99;
+		double a = 2*M_PI/n;
+		for(i = 0; i < n; ++i) {
+			// Drawing the rays from outside to centre
+			// really exercises accuracy
+			setup_line_int(j++, (int)1500*cos(a*i), (int)1500*sin(a*i), 0, 0, 0, MAX_Z_LEVEL);
+		}
+		for(i = 0; i < n; ++i) {
+			setup_line_int(j++, (int)1500*cos(a*i), (int)1500*sin(a*i), (int)1500*cos(a*i), (int)1500*sin(a*i), 0, MAX_Z_LEVEL);
+		}
+
+		for(;;) {
+			for(i = 0; i < j; ++i) {
 				execute_line(i);
 			}
 		}
@@ -1534,7 +1517,14 @@ int main(void) {
 
 	int gg = 0;
 
-	update_display_list(0.006);
+	double k = 0.006;
+	for(unsigned i = 1; i < (2*N_POINTS-3); ++i) {
+		double x0, y0, x1, y1, kk = k;
+
+		x0 = wrapx(i);   y0 = wrapy(i);
+		x1 = wrapx(i+1); y1 = wrapy(i+1);
+		setup_line(i, kk, x0, y0, x1, y1, 0);
+	}
 
 	for(unsigned f = 0; ; ++f) {
 		/*
