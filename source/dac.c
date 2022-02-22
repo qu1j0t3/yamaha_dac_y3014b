@@ -441,13 +441,12 @@ void execute_line(unsigned i) {
 	// If limitlow[i] is set, it means we must invert the comparator output
 	spi(DAC_LIMIT, limit_dac[i]);
 
-	// TODO: There is an interesting issue here.
-	//       If we set up the integrators so that they are SLOWER than the DAC slew...
-	//       DAC output amp is rated at slew 0.55 V/µs which is much faster than integrators at 10k+10n
-	//       Maximum integrator speed in one axis is coefficient 1.0.
-	//       One integrator will always be > sqrt(2)/2 due to unit vector normalisation.
-	//       then we prevent the situation where a line ends before DAC has settled.
-	//       Also: Look into buffered vs unbuffered settling time.
+	// TODO: N.B. the integrators are much slower than the DAC slew...
+	//       DAC integrator amp is MCP6292 rated at 7V/µs
+	//       DAC output amp is rated at slew 0.55 V/µs
+	//       When integrator input resistor is 10kΩ and cap is 10nF:
+	//       Maximum integration rate is, with +1.25V into integrator, 1.25/RC per second or .0125 V/µs (!)
+	//       Also: Look into DAC buffered vs unbuffered settling time.
 
     setCoefficients( xcoeff[i], ycoeff[i] );
 
@@ -804,6 +803,39 @@ int main(void) {
 			execute_line(9);
 			execute_line(10);
 			execute_line(11);
+		}
+	}
+
+	// Stars demo
+
+	if(1) {
+		for(unsigned frame = 0; ; ++frame) {
+			unsigned j;
+			if ((frame % 512) == 0) {
+				j = 0;
+				int square = 1500;
+				setup_line_int(j++, -square, -square,  square, -square, 0, MAX_Z_LEVEL);
+				setup_line_int(j++,  square, -square,  square,  square, 0, MAX_Z_LEVEL);
+				setup_line_int(j++,  square,  square, -square,  square, 0, MAX_Z_LEVEL);
+				setup_line_int(j++, -square,  square, -square, -square, 0, MAX_Z_LEVEL);
+
+				for(;j < 150;) {
+					int xx = (abs(rand()) % (square*2)) - square;
+					int yy = (abs(rand()) % (square*2)) - square;
+					setup_line_int(j++, xx, yy, xx, yy, 0, MAX_Z_LEVEL);
+				}
+
+				uint16_t perm[j];
+				for(uint16_t i = 0; i < j; ++i) {
+					perm[i] = i;
+				}
+				//shuffle_display_list(j, perm);
+				sort_display_list(j, perm);
+			}
+
+			for(unsigned i = 0; i < j; ++i) {
+				execute_line(i);
+			}
 		}
 	}
 
