@@ -37,7 +37,7 @@ pin_labels:
 - {pin_num: '27', pin_signal: PTD6/KBI0_P30/UART2_RX, label: 'X_INT_HOLD/J1[7]/PTD6_RXD2', identifier: X_INT_HOLD}
 - {pin_num: '47', pin_signal: PTE4/KBI1_P4, label: 'DAC_LOAD/J1[9]/PTE4_GPIO1', identifier: DAC_LOAD}
 - {pin_num: '77', pin_signal: PTC5/KBI0_P21/FTM1_CH1/RTCO, label: 'Z_BLANK/J1[11]/PTC5_T2', identifier: Z_BLANK}
-- {pin_num: '20', pin_signal: PTE6/KBI1_P6, label: 'DAC_SD_X_COEFF/J1[13]/PTE6_LED2', identifier: DAC_SD_X_COEFF}
+- {pin_num: '20', pin_signal: PTE6/KBI1_P6, label: 'DAC_SD_X_COEFF/J1[13]/PTE6_LED2', identifier: DAC_SD_X_COEFF;NOTCS_DAC_XCOEFF}
 - {pin_num: '21', pin_signal: PTE5/KBI1_P5, label: 'DAC_CLOCK/J1[15]/PTE5_LED3', identifier: DAC_CLOCK}
 - {pin_num: '31', pin_signal: PTC1/KBI0_P17/FTM2_CH1/ADC0_SE9, label: 'J2[3]/J3[6]/PTC1_A2_PWM1'}
 - {pin_num: '43', pin_signal: PTF3/KBI1_P11/UART1_TX, label: 'J2[5]/PTF3_LED5'}
@@ -50,7 +50,7 @@ pin_labels:
 - {pin_num: '74', pin_signal: PTG0/KBI1_P16, label: 'J3[5]/PTG0_GPIO7'}
 - {pin_num: '78', pin_signal: PTC4/KBI0_P20/RTCO/FTM1_CH0/ACMP0_IN2/SWD_CLK, label: 'J3[7]/PTC4_SWD_CLK_GPIO8'}
 - {pin_num: '3', pin_signal: PTH7/KBI1_P31/PWT_IN1, label: 'J3[9]/PTH7_GPIO9'}
-- {pin_num: '4', pin_signal: PTH6/KBI1_P30, label: 'DAC_SD_Y_COEFF/J3[11]/PTH6_GPIO10', identifier: DAC_SD_Y_COEFF}
+- {pin_num: '4', pin_signal: PTH6/KBI1_P30, label: 'DAC_SD_Y_COEFF/J3[11]/PTH6_GPIO10', identifier: DAC_SD_Y_COEFF;NOTCS_DAC_YCOEFF;NOTCS_DAC_COEFF}
 - {pin_num: '76', pin_signal: PTE0/KBI1_P0/SPI0_SCK/TCLK1/I2C1_SDA, label: 'J4[1]/PTE0_SPI0_SCK', identifier: SPI_CLOCK}
 - {pin_num: '75', pin_signal: PTE1/KBI1_P1/SPI0_MOSI/I2C1_SCL, label: 'J4[3]/PTE1_SPI0_MOSI', identifier: SPI_DATAOUT}
 - {pin_num: '68', pin_signal: PTE2/KBI1_P2/SPI0_MISO/PWT_IN0, label: 'J4[5]/PTE2_SPI0_MISO'}
@@ -121,16 +121,11 @@ void BOARD_InitBootPins(void)
 BOARD_InitPins:
 - options: {callFromInitBoot: 'true', coreID: core0, enableClock: 'true'}
 - pin_list:
-  - {pin_num: '4', peripheral: GPIOB, signal: 'GPIO, 30', pin_signal: PTH6/KBI1_P30, direction: OUTPUT}
-  - {pin_num: '20', peripheral: GPIOB, signal: 'GPIO, 6', pin_signal: PTE6/KBI1_P6, direction: OUTPUT}
-  - {pin_num: '21', peripheral: GPIOB, signal: 'GPIO, 5', pin_signal: PTE5/KBI1_P5, direction: OUTPUT}
+  - {pin_num: '4', peripheral: GPIOB, signal: 'GPIO, 30', pin_signal: PTH6/KBI1_P30, identifier: NOTCS_DAC_COEFF, direction: OUTPUT}
   - {pin_num: '24', peripheral: GPIOA, signal: 'GPIO, 19', pin_signal: PTC3/KBI0_P19/FTM2_CH3/ADC0_SE11, direction: OUTPUT}
-  - {pin_num: '25', peripheral: GPIOA, signal: 'GPIO, 18', pin_signal: PTC2/KBI0_P18/FTM2_CH2/ADC0_SE10, direction: OUTPUT}
   - {pin_num: '26', peripheral: GPIOA, signal: 'GPIO, 31', pin_signal: PTD7/KBI0_P31/UART2_TX, direction: OUTPUT}
-  - {pin_num: '27', peripheral: GPIOA, signal: 'GPIO, 30', pin_signal: PTD6/KBI0_P30/UART2_RX, direction: OUTPUT}
   - {pin_num: '32', peripheral: GPIOA, signal: 'GPIO, 16', pin_signal: PTC0/KBI0_P16/FTM2_CH0/ADC0_SE8, direction: OUTPUT}
   - {pin_num: '77', peripheral: GPIOA, signal: 'GPIO, 21', pin_signal: PTC5/KBI0_P21/FTM1_CH1/RTCO, direction: OUTPUT}
-  - {pin_num: '47', peripheral: GPIOB, signal: 'GPIO, 4', pin_signal: PTE4/KBI1_P4, direction: OUTPUT}
   - {pin_num: '62', peripheral: GPIOA, signal: 'GPIO, 0', pin_signal: PTA0/KBI0_P0/FTM0_CH0/I2C0_4WSCLOUT/ACMP0_IN0/ADC0_SE0, identifier: NOTCS_DAC_0, direction: OUTPUT}
   - {pin_num: '76', peripheral: GPIOB, signal: 'GPIO, 0', pin_signal: PTE0/KBI1_P0/SPI0_SCK/TCLK1/I2C1_SDA, direction: OUTPUT}
   - {pin_num: '75', peripheral: GPIOB, signal: 'GPIO, 1', pin_signal: PTE1/KBI1_P1/SPI0_MOSI/I2C1_SCL, direction: OUTPUT}
@@ -202,13 +197,6 @@ void BOARD_InitPins(void)
     /* Initialize GPIO functionality on pin PTA16 (pin 32) */
     GPIO_PinInit(BOARD_INITPINS_TRIGGER_GPIO_PORT, BOARD_INITPINS_TRIGGER_PIN, &TRIGGER_config);
 
-    gpio_pin_config_t X_INT_RESET_config = {
-        .pinDirection = kGPIO_DigitalOutput,
-        .outputLogic = 0U
-    };
-    /* Initialize GPIO functionality on pin PTA18 (pin 25) */
-    GPIO_PinInit(BOARD_INITPINS_X_INT_RESET_GPIO_PORT, BOARD_INITPINS_X_INT_RESET_PIN, &X_INT_RESET_config);
-
     gpio_pin_config_t Y_INT_RESET_config = {
         .pinDirection = kGPIO_DigitalOutput,
         .outputLogic = 0U
@@ -222,13 +210,6 @@ void BOARD_InitPins(void)
     };
     /* Initialize GPIO functionality on pin PTA21 (pin 77) */
     GPIO_PinInit(BOARD_INITPINS_Z_BLANK_GPIO_PORT, BOARD_INITPINS_Z_BLANK_PIN, &Z_BLANK_config);
-
-    gpio_pin_config_t X_INT_HOLD_config = {
-        .pinDirection = kGPIO_DigitalOutput,
-        .outputLogic = 0U
-    };
-    /* Initialize GPIO functionality on pin PTA30 (pin 27) */
-    GPIO_PinInit(BOARD_INITPINS_X_INT_HOLD_GPIO_PORT, BOARD_INITPINS_X_INT_HOLD_PIN, &X_INT_HOLD_config);
 
     gpio_pin_config_t Y_INT_HOLD_config = {
         .pinDirection = kGPIO_DigitalOutput,
@@ -251,27 +232,6 @@ void BOARD_InitPins(void)
     /* Initialize GPIO functionality on pin PTB1 (pin 75) */
     GPIO_PinInit(BOARD_INITPINS_SPI_DATAOUT_GPIO_PORT, BOARD_INITPINS_SPI_DATAOUT_PIN, &SPI_DATAOUT_config);
 
-    gpio_pin_config_t DAC_LOAD_config = {
-        .pinDirection = kGPIO_DigitalOutput,
-        .outputLogic = 0U
-    };
-    /* Initialize GPIO functionality on pin PTB4 (pin 47) */
-    GPIO_PinInit(BOARD_INITPINS_DAC_LOAD_GPIO_PORT, BOARD_INITPINS_DAC_LOAD_PIN, &DAC_LOAD_config);
-
-    gpio_pin_config_t DAC_CLOCK_config = {
-        .pinDirection = kGPIO_DigitalOutput,
-        .outputLogic = 0U
-    };
-    /* Initialize GPIO functionality on pin PTB5 (pin 21) */
-    GPIO_PinInit(BOARD_INITPINS_DAC_CLOCK_GPIO_PORT, BOARD_INITPINS_DAC_CLOCK_PIN, &DAC_CLOCK_config);
-
-    gpio_pin_config_t DAC_SD_X_COEFF_config = {
-        .pinDirection = kGPIO_DigitalOutput,
-        .outputLogic = 0U
-    };
-    /* Initialize GPIO functionality on pin PTB6 (pin 20) */
-    GPIO_PinInit(BOARD_INITPINS_DAC_SD_X_COEFF_GPIO_PORT, BOARD_INITPINS_DAC_SD_X_COEFF_PIN, &DAC_SD_X_COEFF_config);
-
     gpio_pin_config_t LIMIT_LOW_config = {
         .pinDirection = kGPIO_DigitalOutput,
         .outputLogic = 0U
@@ -279,12 +239,12 @@ void BOARD_InitPins(void)
     /* Initialize GPIO functionality on pin PTB24 (pin 19) */
     GPIO_PinInit(BOARD_INITPINS_LIMIT_LOW_GPIO_PORT, BOARD_INITPINS_LIMIT_LOW_PIN, &LIMIT_LOW_config);
 
-    gpio_pin_config_t DAC_SD_Y_COEFF_config = {
+    gpio_pin_config_t NOTCS_DAC_COEFF_config = {
         .pinDirection = kGPIO_DigitalOutput,
         .outputLogic = 0U
     };
     /* Initialize GPIO functionality on pin PTB30 (pin 4) */
-    GPIO_PinInit(BOARD_INITPINS_DAC_SD_Y_COEFF_GPIO_PORT, BOARD_INITPINS_DAC_SD_Y_COEFF_PIN, &DAC_SD_Y_COEFF_config);
+    GPIO_PinInit(BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO_PORT, BOARD_INITPINS_NOTCS_DAC_COEFF_PIN, &NOTCS_DAC_COEFF_config);
 }
 
 /* clang-format off */
