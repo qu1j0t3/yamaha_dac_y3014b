@@ -88,31 +88,31 @@ void spi(unsigned cs, uint16_t word) {
 
 	// Select chip
 	if (cs == DAC_LIMIT){
-		BOARD_INITPINS_NOTCS_DAC_0_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
+		BOARD_INITPINS_NOTCS_DAC_0_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
 	} else if (cs == DAC_POS) {
-		BOARD_INITPINS_NOTCS_DAC_1_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
+		BOARD_INITPINS_NOTCS_DAC_1_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
 	} else if (cs == DAC_Z) {
-		BOARD_INITPINS_NOTCS_DAC_Z_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
+		BOARD_INITPINS_NOTCS_DAC_Z_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
 	} else if (cs == DAC_COEFF) {
-		BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO_PIN_MASK;
+		BOARD_INITPINS_NOTCS_DAC_COEFF_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO_PIN_MASK;
 	}
 
 	// Bit-bang SPI
 	for (unsigned i = 16; i--;) {
 		if ((word >> i) & 1) {
-			BOARD_INITPINS_SPI_DATAOUT_GPIO->PSOR = BOARD_INITPINS_SPI_DATAOUT_GPIO_PIN_MASK;
+			BOARD_INITPINS_SPI_DATAOUT_FGPIO->PSOR = BOARD_INITPINS_SPI_DATAOUT_GPIO_PIN_MASK;
 		} else {
-			BOARD_INITPINS_SPI_DATAOUT_GPIO->PCOR = BOARD_INITPINS_SPI_DATAOUT_GPIO_PIN_MASK;
+			BOARD_INITPINS_SPI_DATAOUT_FGPIO->PCOR = BOARD_INITPINS_SPI_DATAOUT_GPIO_PIN_MASK;
 		}
-		BOARD_INITPINS_SPI_CLOCK_GPIO->PSOR = BOARD_INITPINS_SPI_CLOCK_GPIO_PIN_MASK;
-		BOARD_INITPINS_SPI_CLOCK_GPIO->PCOR = BOARD_INITPINS_SPI_CLOCK_GPIO_PIN_MASK;
+		BOARD_INITPINS_SPI_CLOCK_FGPIO->PSOR = BOARD_INITPINS_SPI_CLOCK_GPIO_PIN_MASK;
+		BOARD_INITPINS_SPI_CLOCK_FGPIO->PCOR = BOARD_INITPINS_SPI_CLOCK_GPIO_PIN_MASK;
 	}
 
 	// Deselect chip (and also latch DAC data when NOT_LDAC is tied low)
-	BOARD_INITPINS_NOTCS_DAC_1_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
-	BOARD_INITPINS_NOTCS_DAC_0_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
-	BOARD_INITPINS_NOTCS_DAC_Z_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
-	BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO_PIN_MASK;
+	BOARD_INITPINS_NOTCS_DAC_1_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
+	BOARD_INITPINS_NOTCS_DAC_0_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
+	BOARD_INITPINS_NOTCS_DAC_Z_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
+	BOARD_INITPINS_NOTCS_DAC_COEFF_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO_PIN_MASK;
 
 	// Without this delay, making an immediate next call to set unit B will fail (DAC won't latch)
 	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
@@ -162,6 +162,7 @@ double py[N_POINTS]={
 };
 
 
+
 double wrapx(unsigned i) {
   return i < N_POINTS ? px[i] : -px[N_POINTS + N_POINTS - i - 2];
 }
@@ -169,7 +170,8 @@ double wrapy(unsigned i) {
   return py[i < N_POINTS ? i : N_POINTS + N_POINTS - i - 2];
 }
 
-#define DISPLAY_LIST_MAX 300
+#define DISPLAY_LIST_MAX 450
+#define NORMALISE_DIRECTIONS 1
 
 #define MAX_Z_LEVEL 0xfffu
 
@@ -244,8 +246,8 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 		// Determine scale based on tests
 		// Measured 4.83V as USB+ ; reference measures 2.504.
 		// DAC output amp can swing to Vdd-0.04 i.e. 4.79 ... difference is 2.29V, scale 0.916 ... 0.9 should be fairly safe
-		xcoeff[i] = DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)((c*0.9/2.0 + 0.5)*0xfff + 0.5);
-		ycoeff[i] = DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | (uint16_t)((s*0.9/2.0 + 0.5)*0xfff + 0.5);
+		xcoeff[i] = DAC_A | DAC_GAINx2 | DAC_UNBUFFERED | DAC_ACTIVE | (uint16_t)((c*0.9/2.0 + 0.5)*0xfff + 0.5);
+		ycoeff[i] = DAC_B | DAC_GAINx2 | DAC_UNBUFFERED | DAC_ACTIVE | (uint16_t)((s*0.9/2.0 + 0.5)*0xfff + 0.5);
 
 		line_limit_x[i] = abs(dx) > abs(dy); // set if X is faster changing integrator
 
@@ -293,11 +295,13 @@ unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t das
 	/* This higher level call will try to position line in a normalised direction (X increasing, Y increasing)
 	// and if that leads to a starting position outside DAC limits,
 	// will then try to place line reversed (which is probably not so good for display list sorting
-	// but necessary to have the partial line rendered at all).
-	if (x0 > x1) {
+	// but necessary to have the partial line rendered at all).*/
+
+	if (NORMALISE_DIRECTIONS && x0 > x1) {
 		return setup_line_int_(i, x1, y1, x0, y0, dash, zlevel)
 				|| setup_line_int_(i, x0, y0, x1, y1, dash, zlevel);
-	}*/
+	}
+
 	return setup_line_int_(i, x0, y0, x1, y1, dash, zlevel)
 			|| setup_line_int_(i, x1, y1, x0, y0, dash, zlevel);
 }
@@ -315,6 +319,55 @@ unsigned setup_line_dim(unsigned i, double k, double x0, double y0, double x1, d
 // Modulo is quite slow on this processor, so use an
 // array lookup as a fast but constant time "mod 30"
 static uint8_t next[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,0};
+
+#define ON 0x80u
+#define ENDCHAR 0xffu
+uint8_t chardata[] = {
+		// cell is 6 wide by 10 high. baseline is y=2
+		// first byte, starting position
+		// subsequent bytes until 0: new position. ON = beam on
+		' ', 0x00, ENDCHAR,
+		'A', 0x02, ON|0x07, ON|0x3a, ON|0x67, ON|0x62, 0x05, ON|0x65, ENDCHAR,
+		'O', 0x12, ON|0x12, ON|0x52, ON|0x64, ON|0x68, ON|0x5a, ON|0x1a, ON|0x08, ON|0x04, ON|0x12, ENDCHAR,
+		'H', 0x02, ON|0x0a, 0x06, ON|0x66, 0x62, ON|0x6a, ENDCHAR,
+		'E', 0x62, ON|0x02, ON|0x0a, ON|0x6a, 0x06, ON|0x56, ENDCHAR,
+		'L', 0x52, ON|0x02, ON|0x0a, ENDCHAR,
+		'B', 0x02, ON|0x52, ON|0x64, ON|0x56, ON|0x68, ON|0x5a, ON|0x0a, ON|0x02, 0x06, ON|0x56, ENDCHAR,
+		'I', 0x22, ON|0x42, 0x32, ON|0x3a, 0x2a, ON|0x4a, ENDCHAR,
+		'X', 0x02, ON|0x6a, 0x0a, ON|0x62, ENDCHAR
+};
+uint16_t charmap[0x80];
+
+void index_chardata() {
+	uint16_t i = 0;
+    while(i < sizeof(chardata)) {
+    	charmap[ chardata[i] ] = i;
+    	++i; // skip character marker
+    	while(i < sizeof(chardata) && chardata[i] != ENDCHAR)
+    		++i;
+    	++i; // skip endchar marker
+    }
+}
+
+unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
+	int lastx = 12345, lasty = 12345;
+	for(uint8_t *pc = (uint8_t*)s; *pc; ++pc) {
+		uint8_t *p;
+		unsigned i;
+
+		for(i = 0, p = chardata + charmap[*pc] + 1 ; *p != ENDCHAR ; ++p, ++i) {
+			int posx = x + scale*((*p & 0x70) >> 4),
+				posy = y + scale*(*p & 0x0f);
+			if(i && (*p & ON)) {
+				setup_line_int(idx++, lastx, lasty, posx, posy, 0, MAX_Z_LEVEL);
+			}
+			lastx = posx;
+			lasty = posy;
+		}
+		x += scale*9; // advance to the right by one character position
+	}
+	return idx;
+}
 
 void execute_line(unsigned i) {
 	static uint16_t last_pos_x, last_pos_y, last_z, last_xcoeff, last_ycoeff;
@@ -384,6 +437,7 @@ void execute_line(unsigned i) {
     // Add some settling time for limit DAC. Without this, some lines may be dropped/truncated.
 
 	four_microseconds();
+	four_microseconds();
 
 	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
@@ -426,7 +480,7 @@ void execute_line(unsigned i) {
 	} else*/ {
 		// solid line
 		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
-		for(unsigned i = 0; BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK; ++i)
+		while(BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK)
 			;
 	}
 
@@ -436,8 +490,6 @@ void execute_line(unsigned i) {
 	BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
 
 	BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam modulate OFF
-
-
 
     BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
@@ -453,6 +505,10 @@ int main(void) {
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
     BOARD_InitLEDsPins();
+
+
+    index_chardata();
+
 
     #if 0 // Test sine wave and hold switch
     for(uint32_t cycle = 0; ; ++cycle) {
@@ -642,7 +698,7 @@ int main(void) {
 	//  square test pattern
 
 	square:
-	if(0) {
+	if(1) {
 		// Benchmark, 4.7k integrating resistor, 816.8 fps (about 8,160 vectors/second)
 		// these are long vectors, about 6.5 divisions
 
@@ -669,6 +725,8 @@ int main(void) {
 		setup_line_dim(j++, k, +.4, -.5, +.4, +.5);
 		setup_line(j++, k, -.25, -.25, +.25, +.25, 0);
 		setup_line(j++, k, -.25, +.25, +.25, -.25, 0);
+		j = setup_text(j, (int)(k * -0.3 * 0xfff), (int)(k * 0.3 * 0xfff), 40, "HELLO");
+		j = setup_text(j, (int)(k * -0.3 * 0xfff), (int)(k * 0.15 * 0xfff), 40, "BOLIX");
 
 
 		for(;;) {
@@ -680,7 +738,9 @@ int main(void) {
 
 	// Stars demo
 
-	if(1) {
+	if(0) {
+		uint16_t perm[40];
+
 		for(unsigned frame = 0; ; ++frame) {
 			unsigned j;
 			if ((frame % 1024) == 0) {
@@ -691,7 +751,7 @@ int main(void) {
 				setup_line_int(j++,  square,  square, -square,  square, 0, MAX_Z_LEVEL);
 				setup_line_int(j++, -square,  square, -square, -square, 0, MAX_Z_LEVEL);
 
-				for(;j < 20;) {
+				for(;j < 40;) {
 					if (1) { // lines
 						int a = (abs(rand()) % (square*2)) - square;
 						int b = (abs(rand()) % (square*2)) - square;
@@ -710,7 +770,6 @@ int main(void) {
 					}
 				}
 
-				uint16_t perm[j];
 				for(uint16_t i = 0; i < j; ++i) {
 					perm[i] = i;
 				}
@@ -719,7 +778,33 @@ int main(void) {
 			}
 
 			for(unsigned i = 0; i < j; ++i) {
-				execute_line(i);
+				execute_line(perm[i]);
+			}
+		}
+	}
+
+	// Boxes demo
+
+	if(0) {
+		unsigned j = 0;
+		for(int i = 0; i < 100; ++i) {
+			int x = ((i/10)-5)*300, y = ((i % 10)-5)*300;
+			setup_line_int(j++, x,     y,     x+200, y,     0, MAX_Z_LEVEL);
+			setup_line_int(j++, x+200, y,     x+200, y+200, 0, MAX_Z_LEVEL);
+			setup_line_int(j++, x+200, y+200, x,     y+200, 0, MAX_Z_LEVEL);
+			setup_line_int(j++, x,     y+200, x,     y,     0, MAX_Z_LEVEL);
+		}
+
+		uint16_t perm[j];
+		for(uint16_t i = 0; i < j; ++i) {
+			perm[i] = i;
+		}
+		//shuffle_display_list(j, perm);
+		//sort_display_list(j, perm);
+
+		for(;;) {
+			for(unsigned i = 0; i < j; ++i) {
+				execute_line(perm[i]);
 			}
 		}
 	}
@@ -727,21 +812,28 @@ int main(void) {
 	// DAC Coefficient calibrator test pattern
 
 	if(0) {
+		unsigned j = 0;
 		double k = 0.75;
 		// Note that this calibration changes a lot with the magnitude of the coefficients,
 		// i.e. seems to be nonlinear. We might need to do a calibration at 0.95x and say 0.05x
 		// Also a 45° version might be good
-		setup_line(0, k, -.5, 0, 0.45, 0, 0);
-		setup_line(1, k, +.5, 0, -0.45, 0, 0);
-		setup_line(2, k, 0, -.5, 0, 0.45, 0);
-		setup_line(3, k, 0, +.5, 0, -0.45, 0);
+		setup_line(j++, k, -.5, 0, 0.45, 0, 0);
+		setup_line(j++, k, +.5, 0, -0.45, 0, 0);
+		setup_line(j++, k, 0, -.5, 0, 0.45, 0);
+		setup_line(j++, k, 0, +.5, 0, -0.45, 0);
+		setup_line(j++, k, -.5, +.5, 0, +.5, 0);
+		setup_line(j++, k,  .5, +.5, 0, +.5, 0);
+		setup_line(j++, k, -.5, -.5, 0, -.5, 0);
+		setup_line(j++, k,  .5, -.5, 0, -.5, 0);
+		setup_line(j++, k, -.5, -.5, -.5, 0, 0);
+		setup_line(j++, k, -.5, +.5, -.5, 0, 0);
+		setup_line(j++, k,  .5, -.5,  .5, 0, 0);
+		setup_line(j++, k,  .5, +.5,  .5, 0, 0);
 
 		for(;;) {
-			execute_line(0);
-			execute_line(1);
-			execute_line(2);
-			execute_line(3);
-			execute_line(4);
+			for(unsigned i = 0; i < j; ++i) {
+				execute_line(i);
+			}
 		}
 	}
 
@@ -811,7 +903,7 @@ int main(void) {
 
 	// Starburst
 
-	if(1) {
+	if(0) {
 		unsigned i, j = 0, n = 99;
 		double a = 2*M_PI/n;
 		for(i = 0; i < n; ++i) {
@@ -955,7 +1047,7 @@ int main(void) {
 		}
 	}
 
-	if(0) {
+	if(1) {
 		// Benchmark on this maze: with 2.2k integrating resistors, 96.45 fps -- quality is rough
 		//                              4.7k, 89.41 fps -- acceptable quality (15,825 vectors/second)
 		//                              10k, 79.36 fps
@@ -1147,9 +1239,9 @@ int main(void) {
 		//shuffle_display_list(177, perm);
 		sort_display_list(177, perm);
 
-		for(;;) {
+		for(unsigned f = 0;; ++f) {
 			for(unsigned i = 0; i < 177; ++i) {
-				execute_line(i);
+				execute_line(perm[i]);
 			}
 		}
 	}
