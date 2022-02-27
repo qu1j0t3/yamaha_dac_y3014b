@@ -171,7 +171,7 @@ double wrapy(unsigned i) {
 }
 
 #define DISPLAY_LIST_MAX 450
-#define NORMALISE_DIRECTIONS 1
+#define NORMALISE_DIRECTIONS 0
 
 #define MAX_Z_LEVEL 0xfffu
 
@@ -328,13 +328,42 @@ uint8_t chardata[] = {
 		// subsequent bytes until 0: new position. ON = beam on
 		' ', 0x00, ENDCHAR,
 		'A', 0x02, ON|0x07, ON|0x3a, ON|0x67, ON|0x62, 0x05, ON|0x65, ENDCHAR,
-		'O', 0x12, ON|0x12, ON|0x52, ON|0x64, ON|0x68, ON|0x5a, ON|0x1a, ON|0x08, ON|0x04, ON|0x12, ENDCHAR,
-		'H', 0x02, ON|0x0a, 0x06, ON|0x66, 0x62, ON|0x6a, ENDCHAR,
-		'E', 0x62, ON|0x02, ON|0x0a, ON|0x6a, 0x06, ON|0x56, ENDCHAR,
-		'L', 0x52, ON|0x02, ON|0x0a, ENDCHAR,
 		'B', 0x02, ON|0x52, ON|0x64, ON|0x56, ON|0x68, ON|0x5a, ON|0x0a, ON|0x02, 0x06, ON|0x56, ENDCHAR,
+		'C', 0x64, ON|0x52, ON|0x12, ON|0x04, ON|0x08, ON|0x1a, ON|0x5a, ON|0x68, ENDCHAR,
+		'D', 0x12, ON|0x1a, ON|0x4a, ON|0x68, ON|0x64, ON|0x42, ON|0x12, ENDCHAR,
+		'E', 0x62, ON|0x02, ON|0x0a, ON|0x6a, 0x06, ON|0x56, ENDCHAR,
+		'F', 0x02, ON|0x0a, ON|0x6a, 0x06, ON|0x56, ENDCHAR,
+		'G', 0x35, ON|0x65, ON|0x52, ON|0x12, ON|0x04, ON|0x08, ON|0x1a, ON|0x5a, ON|0x68, ENDCHAR,
+		'H', 0x02, ON|0x0a, 0x06, ON|0x66, 0x62, ON|0x6a, ENDCHAR,
 		'I', 0x22, ON|0x42, 0x32, ON|0x3a, 0x2a, ON|0x4a, ENDCHAR,
-		'X', 0x02, ON|0x6a, 0x0a, ON|0x62, ENDCHAR
+		'J', 0x13, ON|0x22, ON|0x42, ON|0x54, ON|0x5a, ON|0x3a, ENDCHAR,
+		'K', 0x12, ON|0x1a, 0x6a, ON|0x16, ON|0x62, ENDCHAR,
+		'L', 0x52, ON|0x02, ON|0x0a, ENDCHAR,
+		'M', 0x02, ON|0x0a, ON|0x35, ON|0x6a, ON|0x62, ENDCHAR,
+		'N', 0x02, ON|0x0a, ON|0x52, ON|0x5a, ENDCHAR,
+		'O', 0x12, ON|0x52, ON|0x64, ON|0x68, ON|0x5a, ON|0x1a, ON|0x08, ON|0x04, ON|0x12, ENDCHAR,
+		'P', 0x12, ON|0x1a, ON|0x5a, ON|0x68, ON|0x67, ON|0x55, ON|0x15, ENDCHAR,
+		'Q', 0x12, ON|0x52, ON|0x64, ON|0x68, ON|0x5a, ON|0x1a, ON|0x08, ON|0x04, ON|0x12, 0x34, ON|0x50, ENDCHAR,
+		'R', 0x12, ON|0x1a, ON|0x4a, ON|0x58, ON|0x46, ON|0x16, 0x46, ON|0x62, ENDCHAR,
+		'S', 0x22, ON|0x52, ON|0x64, ON|0x26, ON|0x18, ON|0x2a, ON|0x5a, ENDCHAR,
+		'T', 0x32, ON|0x3a, 0x0a, ON|0x6a, ENDCHAR,
+		'U', 0x0a, ON|0x04, ON|0x12, ON|0x42, ON|0x54, ON|0x5a, ENDCHAR,
+		'V', 0x0a, ON|0x32, ON|0x6a, ENDCHAR,
+		'W', 0x0a, ON|0x12, ON|0x37, ON|0x52, ON|0x6a, ENDCHAR,
+		'X', 0x02, ON|0x6a, 0x0a, ON|0x62, ENDCHAR,
+		'Y', 0x0a, ON|0x35, ON|0x6a, 0x35, ON|0x32, ENDCHAR,
+		'Z', 0x0a, ON|0x5a, ON|0x02, ON|0x52, ENDCHAR,
+		//'0', 0x22, ON|0x05, ON|0x07, ON|0x2a, ON|0x3a, ON|0x57, ON|0x55, ON|0x32, ON|0x22, ENDCHAR,
+		'0', 0x22, ON|0x32, ON|0x55, ON|0x57, ON|0x3a, ON|0x2a, ON|0x07, ON|0x05, ON|0x22, ENDCHAR,
+		'1', 0x32, ON|0x3a, ON|0x18, ENDCHAR,
+		'2', 0x52, ON|0x02, ON|0x57, ON|0x4a, ON|0x1a, ON|0x08, ENDCHAR,
+		'3', 0x13, ON|0x42, ON|0x63, ON|0x56, ON|0x26, 0x56, ON|0x69, ON|0x4a, ON|0x19, ENDCHAR,
+		'4', 0x42, ON|0x4a, ON|0x04, ON|0x54, ENDCHAR,
+		'5', 0x03, ON|0x22, ON|0x42, ON|0x54, ON|0x46, ON|0x06, ON|0x0a, ON|0x4a, ENDCHAR,
+		'6', 0x4a, ON|0x1a, ON|0x07, ON|0x05, ON|0x12, ON|0x42, ON|0x54, ON|0x47, ON|0x06, ENDCHAR,
+		'7', 0x22, ON|0x5a, ON|0x0a, ENDCHAR,
+		'8', 0x12, ON|0x42, ON|0x54, ON|0x46, ON|0x58, ON|0x4a, ON|0x1a, ON|0x08, ON|0x16, ON|0x46, 0x16, ON|0x04, ON|0x12, ENDCHAR,
+		'9', 0x12, ON|0x42, ON|0x55, ON|0x57, ON|0x4a, ON|0x1a, ON|0x08, ON|0x15, ON|0x56, ENDCHAR
 };
 uint16_t charmap[0x80];
 
@@ -350,8 +379,8 @@ void index_chardata() {
 }
 
 unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
-	int lastx = 12345, lasty = 12345;
-	for(uint8_t *pc = (uint8_t*)s; *pc; ++pc) {
+	int lastx, lasty;
+	for(uint8_t *pc = (uint8_t*)s; *pc && idx < DISPLAY_LIST_MAX; ++pc) {
 		uint8_t *p;
 		unsigned i;
 
@@ -364,7 +393,7 @@ unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
 			lastx = posx;
 			lasty = posy;
 		}
-		x += scale*9; // advance to the right by one character position
+		x += scale*8; // advance to the right by one character position
 	}
 	return idx;
 }
@@ -462,6 +491,7 @@ void execute_line(unsigned i) {
     	BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
     }
 
+	//BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 	BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
 	// All the above takes about 30-32 µs
@@ -469,7 +499,7 @@ void execute_line(unsigned i) {
 
 	// Wait integrating time
 
-	/*if (line_dash[i]) {
+	if (line_dash[i]) {
 		for(uint32_t dash_mask = 0; BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK; dash_mask = next[dash_mask]) {
 			if(line_dash[i] & (1u << dash_mask)) {
 				BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
@@ -477,7 +507,7 @@ void execute_line(unsigned i) {
 				BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 			}
 		}
-	} else*/ {
+	} else {
 		// solid line
 		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 		while(BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK)
@@ -698,7 +728,7 @@ int main(void) {
 	//  square test pattern
 
 	square:
-	if(1) {
+	if(0) {
 		// Benchmark, 4.7k integrating resistor, 816.8 fps (about 8,160 vectors/second)
 		// these are long vectors, about 6.5 divisions
 
@@ -725,9 +755,6 @@ int main(void) {
 		setup_line_dim(j++, k, +.4, -.5, +.4, +.5);
 		setup_line(j++, k, -.25, -.25, +.25, +.25, 0);
 		setup_line(j++, k, -.25, +.25, +.25, -.25, 0);
-		j = setup_text(j, (int)(k * -0.3 * 0xfff), (int)(k * 0.3 * 0xfff), 40, "HELLO");
-		j = setup_text(j, (int)(k * -0.3 * 0xfff), (int)(k * 0.15 * 0xfff), 40, "BOLIX");
-
 
 		for(;;) {
 			for(unsigned i = 0; i < j; ++i) {
@@ -736,9 +763,48 @@ int main(void) {
 		}
 	}
 
+	// Text demo
+
+	if(1) {
+		// Benchmark, 4.7k integrating resistor, 816.8 fps (about 8,160 vectors/second)
+		// these are long vectors, about 6.5 divisions
+
+		// Note that X = 0 and Y = 0 correspond to Position DAC in mid-range, i.e. 1.25V
+		// DAC value = k*x0*0xfffu + 2048      or, k = 2048/(4095 * abs(max_x_y))
+		// The addressable range of Position DAC is therefore
+		// -2048/(4095*k) .. (4095-2048)/(4095*k) ... if k = 1,   -0.5 .. +0.5
+		// The limit DAC (line endpoint, integrator stop) is intended to be in the same units
+
+		double k = 0.75;
+
+		unsigned j = 0;
+		//j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.3 * 0xfff), 30, "HELLO");
+
+		for(unsigned f = 0; ; ++f) {
+			if(f == 0) {
+				unsigned g = f/50;
+				char n[10];
+				sprintf(n, "%d", g);
+				j = 0;
+				setup_line(j++, k, -.5, -.5, +.5, -.5, 0);
+				setup_line(j++, k, +.5, -.5, +.5, +.5, 0);
+				setup_line(j++, k, +.5, +.5, -.5, +.5, 0);
+				setup_line(j++, k, -.5, +.5, -.5, -.5, 0);
+				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.2 * 0xfff), 60, n);
+				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.1 * 0xfff), 20, n);
+				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.0 * 0xfff), 10, n);
+				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * -0.2 * 0xfff), 30, "ROFLMAO");
+			}
+
+			for(unsigned i = 0; i < j; ++i) {
+				execute_line(i);
+			}
+		}
+	}
+
 	// Stars demo
 
-	if(0) {
+	if(1) {
 		uint16_t perm[40];
 
 		for(unsigned frame = 0; ; ++frame) {
