@@ -394,7 +394,7 @@ unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
 			lastx = posx;
 			lasty = posy;
 		}
-		x += scale*8; // advance to the right by one character position
+		x += scale*9; // advance to the right by one character position
 	}
 	return idx;
 }
@@ -794,20 +794,20 @@ int main(void) {
 		//j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.3 * 0xfff), 30, "HELLO");
 
 		for(unsigned f = 0; ; ++f) {
-			if((f % 150) == 0) {
-				unsigned g = f/150;
+			if((f % 250) == 0) {
+				unsigned g = f/250;
 				char n[10];
 				sprintf(n, "%d", g);
 				j = 0;
-				setup_line(j++, k, -.5, -.5, +.5, -.5, 0);
-				setup_line(j++, k, +.5, -.5, +.5, +.5, 0);
+				setup_line(j++, k, +.5, 0, +.5, +.5, 0);
 				setup_line(j++, k, +.5, +.5, -.5, +.5, 0);
-				setup_line(j++, k, -.5, +.5, -.5, -.5, 0);
+				setup_line(j++, k, -.5, +.5, -.5, 0, 0);
 				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.2 * 0xfff), 60, n);
-				unsigned s = 12;
+				int s = 12;
 				switch(g % 12) {
 				case 0:
-					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "I DO NOT LIKE THE MEN ON THIS SPACESHIP.");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "I DO NOT LIKE THE MEN ON");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "THIS SPACESHIP.");
 					break;
 				case 1:
 					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "THEY ARE UNCOUTH AND FAIL TO");
@@ -825,8 +825,8 @@ int main(void) {
 					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "TO IMPROVE MORALE");
 					break;
 				case 5:
-					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "AND BUILD A SENSE OF CAMARADERIE");
-					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "AMONG THE MEN");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "AND BUILD A SENSE OF ");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "CAMARADERIE AMONG THE MEN");
 					break;
 				case 6:
 					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "BY HOLDING A HUMOROUS ROUND ROBIN");
