@@ -92,7 +92,7 @@ void spi(unsigned cs, uint16_t word) {
 	} else if (cs == DAC_POS) {
 		BOARD_INITPINS_NOTCS_DAC_1_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
 	} else if (cs == DAC_Z) {
-		BOARD_INITPINS_NOTCS_DAC_Z_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
+		//BOARD_INITPINS_NOTCS_DAC_Z_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
 	} else if (cs == DAC_COEFF) {
 		BOARD_INITPINS_NOTCS_DAC_COEFF_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO_PIN_MASK;
 	}
@@ -111,7 +111,7 @@ void spi(unsigned cs, uint16_t word) {
 	// Deselect chip (and also latch DAC data when NOT_LDAC is tied low)
 	BOARD_INITPINS_NOTCS_DAC_1_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
 	BOARD_INITPINS_NOTCS_DAC_0_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
-	BOARD_INITPINS_NOTCS_DAC_Z_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
+	//BOARD_INITPINS_NOTCS_DAC_Z_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
 	BOARD_INITPINS_NOTCS_DAC_COEFF_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO_PIN_MASK;
 
 	// Without this delay, making an immediate next call to set unit B will fail (DAC won't latch)
@@ -344,8 +344,8 @@ uint8_t chardata[] = {
 		'O', 0x12, ON|0x52, ON|0x64, ON|0x68, ON|0x5a, ON|0x1a, ON|0x08, ON|0x04, ON|0x12, ENDCHAR,
 		'P', 0x12, ON|0x1a, ON|0x5a, ON|0x68, ON|0x67, ON|0x55, ON|0x15, ENDCHAR,
 		'Q', 0x12, ON|0x52, ON|0x64, ON|0x68, ON|0x5a, ON|0x1a, ON|0x08, ON|0x04, ON|0x12, 0x34, ON|0x50, ENDCHAR,
-		'R', 0x12, ON|0x1a, ON|0x4a, ON|0x58, ON|0x46, ON|0x16, 0x46, ON|0x62, ENDCHAR,
-		'S', 0x22, ON|0x52, ON|0x64, ON|0x26, ON|0x18, ON|0x2a, ON|0x5a, ENDCHAR,
+		'R', 0x12, ON|0x1a, ON|0x5a, ON|0x68, ON|0x67, ON|0x55, ON|0x15, 0x55, ON|0x62, ENDCHAR,
+		'S', 0x12, ON|0x52, ON|0x64, ON|0x56, ON|0x16, ON|0x08, ON|0x1a, ON|0x5a, ENDCHAR,
 		'T', 0x32, ON|0x3a, 0x0a, ON|0x6a, ENDCHAR,
 		'U', 0x0a, ON|0x04, ON|0x12, ON|0x42, ON|0x54, ON|0x5a, ENDCHAR,
 		'V', 0x0a, ON|0x32, ON|0x6a, ENDCHAR,
@@ -353,7 +353,6 @@ uint8_t chardata[] = {
 		'X', 0x02, ON|0x6a, 0x0a, ON|0x62, ENDCHAR,
 		'Y', 0x0a, ON|0x35, ON|0x6a, 0x35, ON|0x32, ENDCHAR,
 		'Z', 0x0a, ON|0x5a, ON|0x02, ON|0x52, ENDCHAR,
-		//'0', 0x22, ON|0x05, ON|0x07, ON|0x2a, ON|0x3a, ON|0x57, ON|0x55, ON|0x32, ON|0x22, ENDCHAR,
 		'0', 0x22, ON|0x32, ON|0x55, ON|0x57, ON|0x3a, ON|0x2a, ON|0x07, ON|0x05, ON|0x22, ENDCHAR,
 		'1', 0x32, ON|0x3a, ON|0x18, ENDCHAR,
 		'2', 0x52, ON|0x02, ON|0x57, ON|0x4a, ON|0x1a, ON|0x08, ENDCHAR,
@@ -363,7 +362,9 @@ uint8_t chardata[] = {
 		'6', 0x4a, ON|0x1a, ON|0x07, ON|0x05, ON|0x12, ON|0x42, ON|0x54, ON|0x47, ON|0x06, ENDCHAR,
 		'7', 0x22, ON|0x5a, ON|0x0a, ENDCHAR,
 		'8', 0x12, ON|0x42, ON|0x54, ON|0x46, ON|0x58, ON|0x4a, ON|0x1a, ON|0x08, ON|0x16, ON|0x46, 0x16, ON|0x04, ON|0x12, ENDCHAR,
-		'9', 0x12, ON|0x42, ON|0x55, ON|0x57, ON|0x4a, ON|0x1a, ON|0x08, ON|0x15, ON|0x56, ENDCHAR
+		'9', 0x12, ON|0x42, ON|0x55, ON|0x57, ON|0x4a, ON|0x1a, ON|0x08, ON|0x15, ON|0x56, ENDCHAR,
+		'.', 0x32, ON|0x33, ENDCHAR,
+		'\'', 0x3a, ON|0x27, ENDCHAR
 };
 uint16_t charmap[0x80];
 
@@ -409,10 +410,19 @@ void execute_line(unsigned i) {
 	}
 
 	if (is_point[i]) {
-		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
-		BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
-		BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+		// Set HOLD LOW (integrators disconnected)
+	    BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
+
+		// When both comparators are deselected, COMP_LIMIT is LOW.
+	    BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
 		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+
+		BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
+		// Z output is computed as HOLD ^ Z_BLANK ^ LIMIT_LOW ^ COMP_LIMIT
+		// i.e. 0 ^ Z_BLANK ^ 1 ^ 0   ... so Z_BLANK is lowered to turn beam on
+
+		BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+		//BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
 		spi(DAC_POS, pos_dac_x[i]);
 		last_pos_x = pos_dac_x[i];
@@ -422,12 +432,12 @@ void execute_line(unsigned i) {
 		four_microseconds();
 
 		// Unblank Z
-		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
 		delay(20); // This duration can be adjusted!
 
 		// Blank Z
-		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
 		return;
 	}
@@ -485,14 +495,18 @@ void execute_line(unsigned i) {
 		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
 	}
 
+
     if(line_limit_low[i]) {
     	BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
     } else {
     	BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
     }
 
-	//BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+    // HOLD is wired to logic that will unblank Z if Z_ENABLE is also high.
+	BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+
 	BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
+
 
 	// All the above takes about 30-32 µs
 
@@ -509,17 +523,16 @@ void execute_line(unsigned i) {
 		}
 	} else {
 		// solid line
-		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 		while(BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK)
 			;
 	}
 
-	// Blank beam using comparator select and disable invert
-	BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
-	BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
-	BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+	// Blank beam using switch
+	BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK; // Make sure Z stays blanked when HOLD is made low
 
-	BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam modulate OFF
+	// Turn beam modulate OFF - not critical since the switch is now the master control
+	//BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
     BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
@@ -781,8 +794,8 @@ int main(void) {
 		//j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.3 * 0xfff), 30, "HELLO");
 
 		for(unsigned f = 0; ; ++f) {
-			if(f == 0) {
-				unsigned g = f/50;
+			if((f % 150) == 0) {
+				unsigned g = f/150;
 				char n[10];
 				sprintf(n, "%d", g);
 				j = 0;
@@ -791,9 +804,54 @@ int main(void) {
 				setup_line(j++, k, +.5, +.5, -.5, +.5, 0);
 				setup_line(j++, k, -.5, +.5, -.5, -.5, 0);
 				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.2 * 0xfff), 60, n);
-				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.1 * 0xfff), 20, n);
-				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.0 * 0xfff), 10, n);
-				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * -0.2 * 0xfff), 30, "ROFLMAO");
+				unsigned s = 12;
+				switch(g % 12) {
+				case 0:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "I DO NOT LIKE THE MEN ON THIS SPACESHIP.");
+					break;
+				case 1:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "THEY ARE UNCOUTH AND FAIL TO");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "APPRECIATE MY BETTER QUALITIES.");
+					break;
+				case 2:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "I HAVE SOMETHING OF VALUE TO");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "CONTRIBUTE TO THIS MISSION");
+					break;
+				case 3:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "IF THEY WOULD ONLY RECOGNIZE IT.");
+					break;
+				case 4:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "TODAY OVER LUNCH I TRIED");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "TO IMPROVE MORALE");
+					break;
+				case 5:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "AND BUILD A SENSE OF CAMARADERIE");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "AMONG THE MEN");
+					break;
+				case 6:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "BY HOLDING A HUMOROUS ROUND ROBIN");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "DISCUSSION OF THE EARLY DAYS OF");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.4 * 0xfff), s, "THE MISSION.");
+					break;
+				case 7:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "MY OVERTURES WERE BRUTALLY REJECTED.");
+					break;
+				case 8:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "THESE MEN DO NOT WANT A HAPPY SHIP!");
+					break;
+				case 9:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "THEY ARE DEEPLY SICK AND TRY TO ");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "COMPENSATE BY MAKING ME FEEL MISERABLE.");
+					break;
+				case 10:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "LAST WEEK WAS MY BIRTHDAY. ");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "NOBODY EVEN SAID HAPPY BIRTHDAY TO ME.");
+					break;
+				case 11:
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "SOME DAY THIS TAPE WILL BE PLAYED");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "AND THEN THEY'LL BE SORRY.");
+					break;
+				}
 			}
 
 			for(unsigned i = 0; i < j; ++i) {
