@@ -421,7 +421,7 @@ void execute_line(unsigned i) {
 		// Z output is computed as HOLD ^ Z_BLANK ^ LIMIT_LOW ^ COMP_LIMIT
 		// i.e. 0 ^ Z_BLANK ^ 1 ^ 0   ... so Z_BLANK is lowered to turn beam on
 
-		BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+		BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 		//BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
 		spi(DAC_POS, pos_dac_x[i]);
@@ -502,8 +502,9 @@ void execute_line(unsigned i) {
     	BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
     }
 
-    // HOLD is wired to logic that will unblank Z if Z_ENABLE is also high.
-	BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+    // Lowering the Z master enable pulls the gate of switching FET to ground,
+    // allowing drain to float (base of emitter follower).
+	BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 
 	BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
@@ -521,6 +522,9 @@ void execute_line(unsigned i) {
 				BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 			}
 		}
+		// it may be important to leave this in a known state
+		// (debugging weird flashes at the end of the dashed lines)
+		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 	} else {
 		// solid line
 		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
@@ -528,11 +532,12 @@ void execute_line(unsigned i) {
 			;
 	}
 
-	// Blank beam using switch
-	BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK; // Make sure Z stays blanked when HOLD is made low
+	// Raising the Z master enable pulls the gate of Z switching FET to 5V,
+    // turning MOSFET on and pulling drain to source at 0V. This pulls base of follower transistor to 0V.
+	BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK; // Make sure Z stays blanked when HOLD is made low
 
 	// Turn beam modulate OFF - not critical since the switch is now the master control
-	//BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+	BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
     BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
