@@ -246,8 +246,8 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 		// Determine scale based on tests
 		// Measured 4.83V as USB+ ; reference measures 2.504.
 		// DAC output amp can swing to Vdd-0.04 i.e. 4.79 ... difference is 2.29V, scale 0.916 ... 0.9 should be fairly safe
-		xcoeff[i] = DAC_A | DAC_GAINx2 | DAC_UNBUFFERED | DAC_ACTIVE | (uint16_t)((c*0.9/2.0 + 0.5)*0xfff + 0.5);
-		ycoeff[i] = DAC_B | DAC_GAINx2 | DAC_UNBUFFERED | DAC_ACTIVE | (uint16_t)((s*0.9/2.0 + 0.5)*0xfff + 0.5);
+		xcoeff[i] = DAC_A | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((c*0.9/2.0 + 0.5)*0xfff + 0.5);
+		ycoeff[i] = DAC_B | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*0.9/2.0 + 0.5)*0xfff + 0.5);
 
 		line_limit_x[i] = abs(dx) > abs(dy); // set if X is faster changing integrator
 
@@ -283,8 +283,8 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamp );
 	}
 
-	pos_dac_x[i] = DAC_A | DAC_GAINx1 | DAC_UNBUFFERED | DAC_ACTIVE | (uint16_t)posx;
-	pos_dac_y[i] = DAC_B | DAC_GAINx1 | DAC_UNBUFFERED | DAC_ACTIVE | (uint16_t)posy;
+	pos_dac_x[i] = DAC_A | DAC_UNBUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posx;
+	pos_dac_y[i] = DAC_B | DAC_UNBUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posy;
 
 	// suppress lines that push DACs out of bounds
 	// TODO: proper clipping
@@ -344,7 +344,7 @@ uint8_t chardata[] = {
 		'O', 0x12, ON|0x52, ON|0x64, ON|0x68, ON|0x5a, ON|0x1a, ON|0x08, ON|0x04, ON|0x12, ENDCHAR,
 		'P', 0x12, ON|0x1a, ON|0x5a, ON|0x68, ON|0x67, ON|0x55, ON|0x15, ENDCHAR,
 		'Q', 0x12, ON|0x52, ON|0x64, ON|0x68, ON|0x5a, ON|0x1a, ON|0x08, ON|0x04, ON|0x12, 0x34, ON|0x50, ENDCHAR,
-		'R', 0x12, ON|0x1a, ON|0x5a, ON|0x68, ON|0x67, ON|0x55, ON|0x15, 0x55, ON|0x62, ENDCHAR,
+		'R', 0x12, ON|0x1a, ON|0x5a, ON|0x68, ON|0x67, ON|0x55, ON|0x15, 0x55, ON|0x72, ENDCHAR,
 		'S', 0x12, ON|0x52, ON|0x64, ON|0x56, ON|0x16, ON|0x08, ON|0x1a, ON|0x5a, ENDCHAR,
 		'T', 0x32, ON|0x3a, 0x0a, ON|0x6a, ENDCHAR,
 		'U', 0x0a, ON|0x04, ON|0x12, ON|0x42, ON|0x54, ON|0x5a, ENDCHAR,
@@ -410,6 +410,10 @@ void execute_line(unsigned i) {
 	}
 
 	if (is_point[i]) {
+		// Assume this initial state
+		//BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+		//BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
 		// Set HOLD LOW (integrators disconnected)
 	    BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
@@ -417,12 +421,13 @@ void execute_line(unsigned i) {
 	    BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
 		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
 
-		BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
+		BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
 		// Z output is computed as HOLD ^ Z_BLANK ^ LIMIT_LOW ^ COMP_LIMIT
 		// i.e. 0 ^ Z_BLANK ^ 1 ^ 0   ... so Z_BLANK is lowered to turn beam on
 
-		BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
-		//BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+		// After a preceding line, we need to wait for integrator reset to complete.
+		// Unconditionally setting these DACs gives a bit of extra time.
+		// TODO: Measure this and compare with actual reset time required.
 
 		spi(DAC_POS, pos_dac_x[i]);
 		last_pos_x = pos_dac_x[i];
@@ -430,14 +435,17 @@ void execute_line(unsigned i) {
 		last_pos_y = pos_dac_y[i];
 
 		four_microseconds();
+		four_microseconds();
 
 		// Unblank Z
-		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+	    BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+	    BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
-		delay(20); // This duration can be adjusted!
+		delay(line_dash[i] ? line_dash[i] : 20); // This duration can be adjusted!
 
 		// Blank Z
-		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+	    BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+	    BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
 		return;
 	}
@@ -448,7 +456,6 @@ void execute_line(unsigned i) {
 	// so 0.9 x 2 x 2.5 = 4.5V. This takes about 8µs.
 	// We cannot release HOLD and RESET until coefficient DACs have settled.
 
-    if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
 	if (xcoeff[i] != last_xcoeff) {
 		spi(DAC_COEFF, xcoeff[i]);
@@ -475,10 +482,18 @@ void execute_line(unsigned i) {
 
     // Add some settling time for limit DAC. Without this, some lines may be dropped/truncated.
 
-	four_microseconds();
-	four_microseconds();
+	// By testing the display list in random order, we can see that repeatability
+	// is not very good even if ample settling time (e.g. 12µs) is allowed here.
+	//   Therefore the display list should be ordered for good locality,
+	// not just in position, but also coefficients to an extent, which tend to slew far
+	// even for close-together lines.
+	//   We may need to consider running the coefficient DACs at GAIN X 1
+	// (can compensate by halving the integration resistors), which makes the slew faster?
+	// TODO: Although it's still unclear whether buffered/unbuffered affects this.
 
-	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+	four_microseconds();
+	four_microseconds();
+	//four_microseconds();
 
 
 	BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
@@ -502,9 +517,9 @@ void execute_line(unsigned i) {
     	BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
     }
 
-    // Lowering the Z master enable pulls the gate of switching FET to ground,
-    // allowing drain to float (base of emitter follower).
-	BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+    if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
+
+    BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 
 	BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
@@ -532,12 +547,12 @@ void execute_line(unsigned i) {
 			;
 	}
 
-	// Raising the Z master enable pulls the gate of Z switching FET to 5V,
-    // turning MOSFET on and pulling drain to source at 0V. This pulls base of follower transistor to 0V.
-	BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK; // Make sure Z stays blanked when HOLD is made low
+	BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK; // Make sure Z stays blanked when HOLD is made low
 
 	// Turn beam modulate OFF - not critical since the switch is now the master control
 	BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
+	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
     BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
@@ -644,39 +659,6 @@ int main(void) {
     }
 
 
-    // Ramp test integrator
-
-	for(;0;) {
-		setCoefficients( DAC_WORD(7, 1023), DAC_WORD(7, 0) );
-
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
-
-		BOARD_INITPINS_Y_INT_RESET_GPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-
-		BOARD_INITPINS_Y_INT_HOLD_GPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
-
-
-		// First ramp ---------------------------------------------
-
-
-		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
-
-		BOARD_INITPINS_Z_BLANK_GPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
-
-		delay(700);
-
-		BOARD_INITPINS_Z_BLANK_GPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam OFF
-
-		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
-
-	    BOARD_INITPINS_Y_INT_HOLD_GPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
-
-		BOARD_INITPINS_Y_INT_RESET_GPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
-	}
-
-
 	// Positioning box test
 
 	if(0) {
@@ -694,42 +676,7 @@ int main(void) {
 		}
 	}
 
-	// Comparator test
-
-	if(0) {
-		// Set threshold voltage (in actual use, only one threshold needs to be set - for the fastest changing axis)
-		uint16_t v = (uint16_t) ((3.0 / 5.0) * 0xfff);
-		spi(DAC_LIMIT, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | v);
-		spi(DAC_LIMIT, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | v);
-
-		// Arm X comparator
-		BOARD_INITPINS_X_COMP_SEL_GPIO->PSOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
-		BOARD_INITPINS_Y_COMP_SEL_GPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
-
-		// A realistic pair of coefficients. X will change faster than Y (angle < 45°)
-		setCoefficients( dac_encode(-cos(DEG2RAD(20.0))), dac_encode(-sin(DEG2RAD(20.0))) );
-
-		for(;1;) {
-			BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
-
-			BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
-
-			BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
-
-			delay(120); // Wait reset time
-
-			BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
-
-			BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
-
-			BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
-
-
-			// Wait integrating time
-
-			while(! (BOARD_INITPINS_STOP_GPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK)) ;
-		}
-	}
+	// Imlac screengrab for Maze Wars
 
 	if(0) {
 		unsigned cnt = 0;
@@ -765,14 +712,16 @@ int main(void) {
 		setup_line(j++, k, +.5, +.5, -.5, +.5, 0);
 		setup_line(j++, k, -.5, +.5, -.5, -.5, 0);
 
+		setup_line(j++, k, -.4, +.5, -.4, -.5, dash);
+		setup_line(j++, k, +.4, +.5, +.4, -.5, 0);
+		setup_line(j++, k,   0, +.5,   0, -.5, dash2);
+
 		setup_line(j++, k, -.5, -.4, +.5, -.4, dash);
-		setup_line_dim(j++, k, -.5, +.4, +.5, +.4);
-		setup_line(j++, k, -.5, 0, +.5, 0, dash2);
-		setup_line(j++, k, 0, -.5, 0, +.5, dash2);
-		setup_line(j++, k, -.4, -.5, -.4, +.5, dash);
-		setup_line_dim(j++, k, +.4, -.5, +.4, +.5);
-		setup_line(j++, k, -.25, -.25, +.25, +.25, 0);
-		setup_line(j++, k, -.25, +.25, +.25, -.25, 0);
+		setup_line(j++, k, -.5, +.4, +.5, +.4, 0);
+		setup_line(j++, k, -.5,   0, +.5,   0, dash2);
+
+		setup_line(j++, k, -.25,-.25,+.25,+.25, 0);
+		setup_line(j++, k, -.25,+.25,+.25,-.25, 0);
 
 		for(;;) {
 			for(unsigned i = 0; i < j; ++i) {
@@ -783,7 +732,7 @@ int main(void) {
 
 	// Text demo
 
-	if(1) {
+	if(0) {
 		// Benchmark, 4.7k integrating resistor, 816.8 fps (about 8,160 vectors/second)
 		// these are long vectors, about 6.5 divisions
 
@@ -868,7 +817,8 @@ int main(void) {
 	// Stars demo
 
 	if(1) {
-		uint16_t perm[40];
+		unsigned items = 100;
+		uint16_t perm[items];
 
 		for(unsigned frame = 0; ; ++frame) {
 			unsigned j;
@@ -880,7 +830,7 @@ int main(void) {
 				setup_line_int(j++,  square,  square, -square,  square, 0, MAX_Z_LEVEL);
 				setup_line_int(j++, -square,  square, -square, -square, 0, MAX_Z_LEVEL);
 
-				for(;j < 40;) {
+				for(;j < items;) {
 					if (1) { // lines
 						int a = (abs(rand()) % (square*2)) - square;
 						int b = (abs(rand()) % (square*2)) - square;
@@ -895,6 +845,7 @@ int main(void) {
 					} else { // stars
 						int xx = (abs(rand()) % (square*2)) - square;
 						int yy = (abs(rand()) % (square*2)) - square;
+						line_dash[j] = rand() & 2 ? 2 : 20; // relative brightness (dwell time)
 						setup_line_int(j++, xx, yy, xx, yy, 0, MAX_Z_LEVEL);
 					}
 				}
@@ -903,7 +854,7 @@ int main(void) {
 					perm[i] = i;
 				}
 				//shuffle_display_list(j, perm);
-				sort_display_list(j, perm);
+				//sort_display_list(j, perm);
 			}
 
 			for(unsigned i = 0; i < j; ++i) {
