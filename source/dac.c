@@ -338,7 +338,7 @@ uint8_t chardata[] = {
 		'I', 0x22, ON|0x42, 0x32, ON|0x3a, 0x2a, ON|0x4a, ENDCHAR,
 		'J', 0x13, ON|0x22, ON|0x42, ON|0x54, ON|0x5a, ON|0x3a, ENDCHAR,
 		'K', 0x12, ON|0x1a, 0x6a, ON|0x16, ON|0x62, ENDCHAR,
-		'L', 0x52, ON|0x02, ON|0x0a, ENDCHAR,
+		'L', 0x62, ON|0x12, ON|0x1a, ENDCHAR,
 		'M', 0x02, ON|0x0a, ON|0x35, ON|0x6a, ON|0x62, ENDCHAR,
 		'N', 0x02, ON|0x0a, ON|0x52, ON|0x5a, ENDCHAR,
 		'O', 0x12, ON|0x52, ON|0x64, ON|0x68, ON|0x5a, ON|0x1a, ON|0x08, ON|0x04, ON|0x12, ENDCHAR,
@@ -363,7 +363,7 @@ uint8_t chardata[] = {
 		'7', 0x22, ON|0x5a, ON|0x0a, ENDCHAR,
 		'8', 0x12, ON|0x42, ON|0x54, ON|0x46, ON|0x58, ON|0x4a, ON|0x1a, ON|0x08, ON|0x16, ON|0x46, 0x16, ON|0x04, ON|0x12, ENDCHAR,
 		'9', 0x12, ON|0x42, ON|0x55, ON|0x57, ON|0x4a, ON|0x1a, ON|0x08, ON|0x15, ON|0x56, ENDCHAR,
-		'.', 0x32, ON|0x33, ENDCHAR,
+		'.', 0x32, ON|0x32, ENDCHAR,
 		'\'', 0x3a, ON|0x27, ENDCHAR
 };
 uint16_t charmap[0x80];
@@ -779,7 +779,7 @@ int main(void) {
 					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "TO IMPROVE MORALE");
 					break;
 				case 5:
-					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "AND BUILD A SENSE OF ");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "AND BUILD A SENSE OF");
 					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "CAMARADERIE AMONG THE MEN");
 					break;
 				case 6:
@@ -794,11 +794,12 @@ int main(void) {
 					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "THESE MEN DO NOT WANT A HAPPY SHIP!");
 					break;
 				case 9:
-					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "THEY ARE DEEPLY SICK AND TRY TO ");
-					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "COMPENSATE BY MAKING ME FEEL MISERABLE.");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "THEY ARE DEEPLY SICK AND");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "TRY TO COMPENSATE BY MAKING ME");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.4 * 0xfff), s, "FEEL MISERABLE.");
 					break;
 				case 10:
-					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "LAST WEEK WAS MY BIRTHDAY. ");
+					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.2 * 0xfff), s, "LAST WEEK WAS MY BIRTHDAY.");
 					j = setup_text(j, (int)(k * -0.6 * 0xfff), (int)(k * -0.3 * 0xfff), s, "NOBODY EVEN SAID HAPPY BIRTHDAY TO ME.");
 					break;
 				case 11:
