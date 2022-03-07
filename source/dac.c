@@ -91,10 +91,10 @@ void spi(unsigned cs, uint16_t word) {
 		BOARD_INITPINS_NOTCS_DAC_0_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_0_GPIO_PIN_MASK;
 	} else if (cs == DAC_POS) {
 		BOARD_INITPINS_NOTCS_DAC_1_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_1_GPIO_PIN_MASK;
-	} else if (cs == DAC_Z) {
-		//BOARD_INITPINS_NOTCS_DAC_Z_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
 	} else if (cs == DAC_COEFF) {
 		BOARD_INITPINS_NOTCS_DAC_COEFF_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO_PIN_MASK;
+	} else if (cs == DAC_Z) {
+		//BOARD_INITPINS_NOTCS_DAC_Z_FGPIO->PCOR = BOARD_INITPINS_NOTCS_DAC_Z_GPIO_PIN_MASK;
 	}
 
 	// Bit-bang SPI
@@ -115,6 +115,10 @@ void spi(unsigned cs, uint16_t word) {
 	BOARD_INITPINS_NOTCS_DAC_COEFF_FGPIO->PSOR = BOARD_INITPINS_NOTCS_DAC_COEFF_GPIO_PIN_MASK;
 
 	// Without this delay, making an immediate next call to set unit B will fail (DAC won't latch)
+	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
+	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
+	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
+	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
 	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
 
 	// Note that DAC takes approx 4.5µs to slew 2.5V   ; 7.2µs to slew 4.4v
@@ -220,20 +224,21 @@ void shuffle_display_list(uint16_t count, uint16_t perm[]) {
                                  but hardware has 8 bit precision
  */
 
-unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel) {
+unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel, uint8_t slow) {
 	int dx = x1-x0, dy = y1-y0, posx, posy;
 	double len = sqrt((double)dx*(double)dx + (double)dy*(double)dy);
 
 	// treat very short lines as points (since crt cannot resolve anyway)
 	// can be calibrated using short lines test pattern below
 	// at some point around length 7 units, lines start to lose brightness
-	is_point[i] = len < 8.0;
+	is_point[i] = len < 2.0;
 	line_z_dac[i] = DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | zlevel;
 
 	if (is_point[i]) {
 		posx = 2048 - (x0+x1)/2;
 		posy = 2048 - (y0+y1)/2;
 	} else {
+		double speed = slow ? 0.5 : 1.0; // This is mostly intended to help text quality, by slowing down the integrators for short lines
 		double c = dx/len, s = dy/len;
 
 		posx = 2048 - x0;
@@ -241,13 +246,9 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 
 		line_dash[i] = dash;
 
-		// TODO: need to scale down slightly because of USB supply voltage being < 5v and amp min/max limits
-		// We need a linear range with gain x2
-		// Determine scale based on tests
-		// Measured 4.83V as USB+ ; reference measures 2.504.
-		// DAC output amp can swing to Vdd-0.04 i.e. 4.79 ... difference is 2.29V, scale 0.916 ... 0.9 should be fairly safe
-		xcoeff[i] = DAC_A | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((c*0.9/2.0 + 0.5)*0xfff + 0.5);
-		ycoeff[i] = DAC_B | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*0.9/2.0 + 0.5)*0xfff + 0.5);
+		// TODO: Verify coefficient range -- if coefficient is close to -1, we might hit a nonlinearity very near 0V DAC output?
+		xcoeff[i] = DAC_A | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((c*speed/2.0 + 0.5)*0xfff + 0.5);
+		ycoeff[i] = DAC_B | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*speed/2.0 + 0.5)*0xfff + 0.5);
 
 		line_limit_x[i] = abs(dx) > abs(dy); // set if X is faster changing integrator
 
@@ -255,8 +256,7 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 
 		line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
 
-		uint16_t limit_fudge = 0; //2; // This can be calibrated using the limit vs position test pattern below
-		uint16_t delta = (uint16_t)(abs(larger_delta)+limit_fudge) / 2;
+		uint16_t delta = (uint16_t)abs(larger_delta)/2;
 		uint16_t clamp;
 		if (line_limit_low[i]) {
 			// limit = 2048 - delta
@@ -291,29 +291,29 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 	return line_active[i] = posx >= 0 && posx < 0x1000 && posy >= 0 && posy < 0x1000;
 }
 
-unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel) {
+unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel, uint8_t slow) {
 	/* This higher level call will try to position line in a normalised direction (X increasing, Y increasing)
 	// and if that leads to a starting position outside DAC limits,
 	// will then try to place line reversed (which is probably not so good for display list sorting
 	// but necessary to have the partial line rendered at all).*/
 
 	if (NORMALISE_DIRECTIONS && x0 > x1) {
-		return setup_line_int_(i, x1, y1, x0, y0, dash, zlevel)
-				|| setup_line_int_(i, x0, y0, x1, y1, dash, zlevel);
+		return setup_line_int_(i, x1, y1, x0, y0, dash, zlevel, slow)
+				|| setup_line_int_(i, x0, y0, x1, y1, dash, zlevel, slow);
 	}
 
-	return setup_line_int_(i, x0, y0, x1, y1, dash, zlevel)
-			|| setup_line_int_(i, x1, y1, x0, y0, dash, zlevel);
+	return setup_line_int_(i, x0, y0, x1, y1, dash, zlevel, slow)
+			|| setup_line_int_(i, x1, y1, x0, y0, dash, zlevel, slow);
 }
 
 // Assumes data is centred on (0,0); k factor will scale input coordinates to -0.5 .. +0.5
 unsigned setup_line(unsigned i, double k, double x0, double y0, double x1, double y1, uint32_t dash) {
 	k *= 0xfff; // scale to position DAC units
-	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), dash, MAX_Z_LEVEL);
+	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), dash, MAX_Z_LEVEL, 0);
 }
 unsigned setup_line_dim(unsigned i, double k, double x0, double y0, double x1, double y1) {
 	k *= 0xfff; // scale to position DAC units
-	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), 0, MAX_Z_LEVEL*95/100);
+	return setup_line_int(i, (int)(k*x0), (int)(k*y0), (int)(k*x1), (int)(k*y1), 0, MAX_Z_LEVEL*95/100, 0);
 }
 
 // Modulo is quite slow on this processor, so use an
@@ -389,7 +389,8 @@ unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
 			int posx = x + scale*((*p & 0x70) >> 4),
 				posy = y + scale*(*p & 0x0f);
 			if(i && (*p & ON)) {
-				setup_line_int(idx++, lastx, lasty, posx, posy, 0, MAX_Z_LEVEL);
+				// Note: improve quality at small text sizes using `slow` flag
+				setup_line_int(idx++, lastx, lasty, posx, posy, 0, MAX_Z_LEVEL, scale < 40);
 			}
 			lastx = posx;
 			lasty = posy;
@@ -599,72 +600,47 @@ int main(void) {
 
     // Test SPI DAC MCP4922
 
-    if(0) {
-    	/* Test levels
-
-    	// ;  Vref 2.499
-		spi(DAC_POS, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u); // should be ~ 1.25V  // 1.250
-		spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu); // should be ~ 2.5V   // 2.499
-		spi(DAC_LIMIT, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0x800u); // should be ~ 2.5V  // 1.253 WHY????????
-		//spi(DAC_LIMIT, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0xc00u); // should be ~ 3.75V  // 3.751
-		//spi(DAC_LIMIT, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu); // should be ~ 5V  // 4.789
-		spi(DAC_LIMIT, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0x800u); // should be ~ 2.5V  // 2.512
-		//spi(DAC_LIMIT, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0xc00u); // should be ~ 3.75V  // 3.766
-		//spi(DAC_LIMIT, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu); // should be ~ 5V    // 4.78
-		for(;;) ;*/
-    }
-
-	// Test DAC ramp
-
     if (0) {
-		for(unsigned i = 0; ; ++i) {
-			uint16_t v = (i << 9) & 0xfff;
+		for(;;) {
 
-			if(v == 0) BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
+			spi(DAC_POS, DAC_A | DAC_GAINx2 | DAC_UNBUFFERED | DAC_ACTIVE | (0xfffu*4/5) /* ~ 4V */ ); // One of these calls is about 7.5µs
+			spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_UNBUFFERED | DAC_ACTIVE | (0xfffu*4/5) /* ~ 2V */ ); // Slew rate is about 0.53 V/µs so about 3.8µs for full scale at GAIN x1
+			BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 
-			spi(DAC_COEFF, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | v);
-			spi(DAC_COEFF, DAC_B | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | v);
 
+			four_microseconds();
+			four_microseconds();
 			BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
+
+			spi(DAC_POS, DAC_A | DAC_GAINx2 | DAC_UNBUFFERED | DAC_ACTIVE | 0);
+			spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_UNBUFFERED | DAC_ACTIVE | 0);
 
 			four_microseconds();
 		}
     }
 
-    for(;0;) {
-		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
-
-		spi(0, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu);
-		spi(0, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu);
-		spi(1, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu);
-		spi(1, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0xfffu);
-
-		BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
-
-		four_microseconds();
-
-		spi(0, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u);
-		spi(0, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u);
-		spi(1, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u);
-		spi(1, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0x800u);
-
-		four_microseconds();
-
-		spi(0, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0);
-		spi(0, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0);
-		spi(1, DAC_A | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0);
-		spi(1, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0);
-
-		four_microseconds();
-    }
-
-
 	// Positioning box test
+	// This can be used to verify basic range of position DACs.
+	// NOTE (Tek 604 monitor): If you can't find the trace, Z input may be overdriven!
+	// - intensity starts to oscillate around +0.8V and may disappear at higher levels
+	// - for mid-intensity control, a Z level of 0.25V should produce a visible trace.
 
 	if(0) {
+		BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 		BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 
-		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK; // Turn beam ON
+		// When both comparators are deselected, COMP_LIMIT is LOW.
+		BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+
+		BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
+		// Z output is computed as HOLD ^ Z_BLANK ^ LIMIT_LOW ^ COMP_LIMIT
+		// i.e. 0 ^ Z_BLANK ^ 0 ^ 0   ... so Z_BLANK is raised to turn beam on
+
+		// Unblank Z
+		BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
 		for(unsigned i = 0; 1; ++i) {
 
 			if((i & 3) == 0) BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
@@ -680,7 +656,7 @@ int main(void) {
 
 	if(0) {
 		unsigned cnt = 0;
-#define LINE(x0,y0,x1,y1) if(!setup_line_int(cnt++, 2*(x0-1022), 2*(y0-1022), 2*(x1-1022), 2*(y1-1022), 0, MAX_Z_LEVEL)) goto square;
+#define LINE(x0,y0,x1,y1) if(!setup_line_int(cnt++, 2*(x0-1022), 2*(y0-1022), 2*(x1-1022), 2*(y1-1022), 0, MAX_Z_LEVEL, 0)) goto square;
 #include "/Users/toby/Documents/Electronics/vectors_v2/larsb-imlac/maze.c"
 
 		for(;;) {
@@ -826,10 +802,10 @@ int main(void) {
 			if ((frame % 1024) == 0) {
 				j = 0;
 				int square = 1500;
-				setup_line_int(j++, -square, -square,  square, -square, 0, MAX_Z_LEVEL);
-				setup_line_int(j++,  square, -square,  square,  square, 0, MAX_Z_LEVEL);
-				setup_line_int(j++,  square,  square, -square,  square, 0, MAX_Z_LEVEL);
-				setup_line_int(j++, -square,  square, -square, -square, 0, MAX_Z_LEVEL);
+				setup_line_int(j++, -square, -square,  square, -square, 0, MAX_Z_LEVEL, 0);
+				setup_line_int(j++,  square, -square,  square,  square, 0, MAX_Z_LEVEL, 0);
+				setup_line_int(j++,  square,  square, -square,  square, 0, MAX_Z_LEVEL, 0);
+				setup_line_int(j++, -square,  square, -square, -square, 0, MAX_Z_LEVEL, 0);
 
 				for(;j < items;) {
 					if (1) { // lines
@@ -837,17 +813,17 @@ int main(void) {
 						int b = (abs(rand()) % (square*2)) - square;
 						int c = (abs(rand()) % (square*2)) - square;
 						int d = (abs(rand()) % (square*2)) - square;
-						setup_line_int(j++, a, b, c, d, 0, MAX_Z_LEVEL);
+						setup_line_int(j++, a, b, c, d, 0, MAX_Z_LEVEL, 0);
 						// Marking line endpoints with a dot helps test
 						// position DACs against integrators and limit.
 						//        A starburst might be a better test of angle dependent error
-						setup_line_int(j++, a, b, a, b, 0, MAX_Z_LEVEL);
-						setup_line_int(j++, c, d, c, d, 0, MAX_Z_LEVEL);
+						setup_line_int(j++, a, b, a, b, 0, MAX_Z_LEVEL, 0);
+						setup_line_int(j++, c, d, c, d, 0, MAX_Z_LEVEL, 0);
 					} else { // stars
 						int xx = (abs(rand()) % (square*2)) - square;
 						int yy = (abs(rand()) % (square*2)) - square;
 						line_dash[j] = rand() & 2 ? 2 : 20; // relative brightness (dwell time)
-						setup_line_int(j++, xx, yy, xx, yy, 0, MAX_Z_LEVEL);
+						setup_line_int(j++, xx, yy, xx, yy, 0, MAX_Z_LEVEL, 0);
 					}
 				}
 
@@ -870,10 +846,10 @@ int main(void) {
 		unsigned j = 0;
 		for(int i = 0; i < 100; ++i) {
 			int x = ((i/10)-5)*300, y = ((i % 10)-5)*300;
-			setup_line_int(j++, x,     y,     x+200, y,     0, MAX_Z_LEVEL);
-			setup_line_int(j++, x+200, y,     x+200, y+200, 0, MAX_Z_LEVEL);
-			setup_line_int(j++, x+200, y+200, x,     y+200, 0, MAX_Z_LEVEL);
-			setup_line_int(j++, x,     y+200, x,     y,     0, MAX_Z_LEVEL);
+			setup_line_int(j++, x,     y,     x+200, y,     0, MAX_Z_LEVEL, 0);
+			setup_line_int(j++, x+200, y,     x+200, y+200, 0, MAX_Z_LEVEL, 0);
+			setup_line_int(j++, x+200, y+200, x,     y+200, 0, MAX_Z_LEVEL, 0);
+			setup_line_int(j++, x,     y+200, x,     y,     0, MAX_Z_LEVEL, 0);
 		}
 
 		uint16_t perm[j];
@@ -924,17 +900,17 @@ int main(void) {
 		unsigned i, j = 0;
 		int x = -2000, y = -2000;
 		for(i = 0; i <= 100; ++i) {
-			setup_line_int(j++, x+3800, y+i*30, x+3900+50*((i % 10) == 0), y+i*30, 0, (4095*i)/100);
+			setup_line_int(j++, x+3800, y+i*30, x+3900+50*((i % 10) == 0), y+i*30, 0, (4095*i)/100, 0);
 		}
 		for(i = 0; i <= 100; ++i) {
-			setup_line_int(j++, x, y+i*30, x+i, y+i*30, 0, MAX_Z_LEVEL);
+			setup_line_int(j++, x, y+i*30, x+i, y+i*30, 0, MAX_Z_LEVEL, 0);
 		}
 		for(i = 1; i <= 10; ++i) {
-			setup_line_int(j++, x+200,       y+i*300,     x+200+i*300, y+i*300,     0, MAX_Z_LEVEL);
-			setup_line_int(j++, x+200+i*300, y+i*300-100, x+200+i*300, y+i*300+100, 0, MAX_Z_LEVEL);
+			setup_line_int(j++, x+200,       y+i*300,     x+200+i*300, y+i*300,     0, MAX_Z_LEVEL, 0);
+			setup_line_int(j++, x+200+i*300, y+i*300-100, x+200+i*300, y+i*300+100, 0, MAX_Z_LEVEL, 0);
 
-			setup_line_int(j++, x+400+i*300, y,       x+400+i*300, y+i*300, 0, MAX_Z_LEVEL);
-			setup_line_int(j++, x+300+i*300, y+i*300, x+500+i*300, y+i*300, 0, MAX_Z_LEVEL);
+			setup_line_int(j++, x+400+i*300, y,       x+400+i*300, y+i*300, 0, MAX_Z_LEVEL, 0);
+			setup_line_int(j++, x+300+i*300, y+i*300, x+500+i*300, y+i*300, 0, MAX_Z_LEVEL, 0);
 		}
 
 		for(;;) {
@@ -951,7 +927,7 @@ int main(void) {
 		double k = 0.4;
 		double a = 2*M_PI/n;
 		for(i = 0; i < n; ++i) {
-			line_active[i] = setup_line(i, k, cos(a*i), sin(a*i), cos(a*(i+1)), sin(a*(i+1)), 0);
+			setup_line(i, k, cos(a*i), sin(a*i), cos(a*(i+1)), sin(a*(i+1)), 0);
 		}
 
 		for(;;) {
@@ -990,10 +966,10 @@ int main(void) {
 		for(i = 0; i < n; ++i) {
 			// Drawing the rays from outside to centre
 			// really exercises accuracy
-			setup_line_int(j++, (int)1500*cos(a*i), (int)1500*sin(a*i), 0, 0, 0, MAX_Z_LEVEL);
+			setup_line_int(j++, (int)1500*cos(a*i), (int)1500*sin(a*i), 0, 0, 0, MAX_Z_LEVEL, 0);
 		}
 		for(i = 0; i < n; ++i) {
-			setup_line_int(j++, (int)1500*cos(a*i), (int)1500*sin(a*i), (int)1500*cos(a*i), (int)1500*sin(a*i), 0, MAX_Z_LEVEL);
+			setup_line_int(j++, (int)1500*cos(a*i), (int)1500*sin(a*i), (int)1500*cos(a*i), (int)1500*sin(a*i), 0, MAX_Z_LEVEL, 0);
 		}
 
 		for(;;) {
