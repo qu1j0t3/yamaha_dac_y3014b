@@ -6,9 +6,34 @@
 #ifndef _PERIPHERALS_H_
 #define _PERIPHERALS_H_
 
+/***********************************************************************************************************************
+ * Included files
+ **********************************************************************************************************************/
+#include "fsl_common.h"
+#include "fsl_clock.h"
+#include "fsl_tpm.h"
+
 #if defined(__cplusplus)
 extern "C" {
 #endif /* __cplusplus */
+
+/***********************************************************************************************************************
+ * Definitions
+ **********************************************************************************************************************/
+/* Definitions for BOARD_InitPeripherals functional group */
+/* Definition of peripheral ID */
+#define FTM0_PERIPHERAL FTM0
+/* Definition of the clock source frequency */
+#define FTM0_CLOCK_SOURCE 40000000UL
+/* FTM0 interrupt vector ID (number). */
+#define FTM0_IRQN FTM0_IRQn
+/* FTM0 interrupt handler identifier. */
+#define FTM0_IRQHANDLER FTM0_IRQHandler
+
+/***********************************************************************************************************************
+ * Global variables
+ **********************************************************************************************************************/
+extern const tpm_config_t FTM0_config;
 
 /***********************************************************************************************************************
  * Initialization functions

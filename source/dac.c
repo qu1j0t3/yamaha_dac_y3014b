@@ -34,6 +34,7 @@
 #include "board.h"
 #include "fsl_debug_console.h"
 #include "fsl_gpio.h"
+#include "fsl_pit.h"
 
 #include "pin_mux.h"
 #include "clock_config.h"
@@ -191,6 +192,18 @@ uint16_t pos_dac_x[DISPLAY_LIST_MAX],
 		 is_point[DISPLAY_LIST_MAX],
 		 line_z_dac[DISPLAY_LIST_MAX];
 
+volatile uint32_t ticks;
+
+void PIT_CH0_IRQHandler(void)
+{
+    PIT_ClearStatusFlags(PIT, kPIT_Chnl_0, kPIT_TimerFlag);
+
+    ++ticks;
+
+    __DSB();
+}
+
+
 int compar_func(const void *pa, const void *pb) {
 	uint16_t a = *(const uint16_t*)pa;
 	uint16_t b = *(const uint16_t*)pb;
@@ -246,9 +259,15 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 
 		line_dash[i] = dash;
 
-		// TODO: Verify coefficient range -- if coefficient is close to -1, we might hit a nonlinearity very near 0V DAC output?
-		xcoeff[i] = DAC_A | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((c*speed/2.0 + 0.5)*0xfff + 0.5);
-		ycoeff[i] = DAC_B | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*speed/2.0 + 0.5)*0xfff + 0.5);
+		// DAC Datasheet output swing = typ 0.01 to Vdd-0.04
+		// When powered from USB, Vdd can swing as low as 4.53V-4.80V in my setup (usb hub with other devices connected)
+		// i.e. 0.01 to 4.76 which is a scale of 0.952 x full range. (WORST case 0.898)
+		// Use 0.9x for now to give a little margin for Vdd
+		// N.B. This is best verified by using the Starburst test below. When Vdd is too low,
+		//      coefficient error near Vdd causes lines to meet and cross some distance from the centre of the pattern.
+		//      When the full coefficient range is available, lines should meet close to the centre.
+		xcoeff[i] = DAC_A | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((c*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
+		ycoeff[i] = DAC_B | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
 
 		line_limit_x[i] = abs(dx) > abs(dy); // set if X is faster changing integrator
 
@@ -403,6 +422,12 @@ unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
 void execute_line(unsigned i) {
 	static uint16_t last_pos_x, last_pos_y, last_z, last_xcoeff, last_ycoeff;
 
+	if(i == 0) {
+		// Sync to timer interrupt
+		for(uint32_t current_tick = ticks; current_tick == ticks;)
+			;
+	}
+
 	if(!line_active[i]) return;
 
 	if (line_z_dac[i] != last_z) {
@@ -413,7 +438,8 @@ void execute_line(unsigned i) {
 	if (is_point[i]) {
 		// Assume this initial state
 		//BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
-		//BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
+		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
 		// Set HOLD LOW (integrators disconnected)
 	    BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
@@ -511,7 +537,6 @@ void execute_line(unsigned i) {
 		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
 	}
 
-
     if(line_limit_low[i]) {
     	BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
     } else {
@@ -550,11 +575,9 @@ void execute_line(unsigned i) {
 
 	BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK; // Make sure Z stays blanked when HOLD is made low
 
-	// Turn beam modulate OFF - not critical since the switch is now the master control
-	BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
-
 	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
+	// Disarm comparator
     BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
 	// As soon as beam is off, we can short the integrator
@@ -563,12 +586,39 @@ void execute_line(unsigned i) {
 }
 
 
+
 int main(void) {
+
+    /* Structure of initialize PIT */
+    pit_config_t pitConfig;
+
+
     /* Init the boards */
     BOARD_InitPins();
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
     BOARD_InitLEDsPins();
+
+    /*
+     * pitConfig.enableRunInDebug = false;
+     */
+    PIT_GetDefaultConfig(&pitConfig);
+
+    /* Init pit module */
+    PIT_Init(PIT, &pitConfig);
+
+    /* Set timer period for channel 0 */
+    PIT_SetTimerPeriod(PIT, kPIT_Chnl_0, 62500);// ~ 90Hz
+    //PIT_SetTimerPeriod(PIT, kPIT_Chnl_0, 83333); // ~ 120Hz
+
+    /* Enable timer interrupts for channel 0 */
+    PIT_EnableInterrupts(PIT, kPIT_Chnl_0, kPIT_TimerInterruptEnable);
+
+    /* Enable at the NVIC */
+    EnableIRQ(PIT_CH0_IRQn);
+
+    /* Start channel 0 */
+    PIT_StartTimer(PIT, kPIT_Chnl_0);
 
 
     index_chardata();
@@ -729,10 +779,13 @@ int main(void) {
 				char n[10];
 				sprintf(n, "%d", g);
 				j = 0;
-				setup_line(j++, k, +.5, 0, +.5, +.5, 0);
+				setup_line(j++, k, +.5, 0,   +.5, +.5, 0);
 				setup_line(j++, k, +.5, +.5, -.5, +.5, 0);
-				setup_line(j++, k, -.5, +.5, -.5, 0, 0);
+				setup_line(j++, k, -.5, +.5, -.5, 0,   0);
 				j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * 0.2 * 0xfff), 60, n);
+				//sprintf(n, "%d", timer_count);
+				//j = setup_text(j, (int)(k * -0.4 * 0xfff), (int)(k * -0.2 * 0xfff), 30, n);
+
 				int s = 12;
 				switch(g % 12) {
 				case 0:
@@ -922,38 +975,22 @@ int main(void) {
 
 	// Circle test
 
-	if(0) {
-		unsigned i, n = 31;
-		double k = 0.4;
-		double a = 2*M_PI/n;
-		for(i = 0; i < n; ++i) {
-			setup_line(i, k, cos(a*i), sin(a*i), cos(a*(i+1)), sin(a*(i+1)), 0);
-		}
-
-		for(;;) {
+	if(1) {
+		for(unsigned k = 0; ; ++k) {
+			unsigned i, n = (k%39)+3;
+			double k = 0.4;
+			double a = 2*M_PI/n;
+			char s[10];
 			for(i = 0; i < n; ++i) {
-				execute_line(i);
-			}
-		}
-	}
-
-	// Circle test with points
-
-	if(0) {
-		unsigned i, n = 99;
-		double k = 0.4;
-		double a = 2*M_PI/n;
-		for(i = 0; i < n; ++i) {
-			if ((i % 4) == 0) {
-				setup_line(i, k, cos(a*i), sin(a*i), cos(a*i), sin(a*i), 0);
-			} else if ((i % 4) < 3) {
 				setup_line(i, k, cos(a*i), sin(a*i), cos(a*(i+1)), sin(a*(i+1)), 0);
 			}
-		}
+			sprintf(s, "%d", n);
+			n = setup_text(n, (int)(k * -0.4 * 0xfff), (int)(k * -0.2 * 0xfff), 30, s);
 
-		for(;;) {
-			for(i = 0; i < n; ++i) {
-				execute_line(i);
+			for(unsigned j = 0; j < 1000; ++j) {
+				for(i = 0; i < n; ++i) {
+					execute_line(i);
+				}
 			}
 		}
 	}
@@ -970,6 +1007,7 @@ int main(void) {
 		}
 		for(i = 0; i < n; ++i) {
 			setup_line_int(j++, (int)1500*cos(a*i), (int)1500*sin(a*i), (int)1500*cos(a*i), (int)1500*sin(a*i), 0, MAX_Z_LEVEL, 0);
+			setup_line_int(j++, (int)750*cos(a*i), (int)750*sin(a*i), (int)750*cos(a*i), (int)750*sin(a*i), 0, MAX_Z_LEVEL, 0);
 		}
 
 		for(;;) {
