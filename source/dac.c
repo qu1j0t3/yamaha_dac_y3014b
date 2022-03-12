@@ -178,6 +178,16 @@ double wrapy(unsigned i) {
 #define DISPLAY_LIST_MAX 450
 #define NORMALISE_DIRECTIONS 0
 
+// If FRAME_SYNC is 1, then the execution of the display list
+// will wait until at least one PIT tick has elapsed (see init code),
+// producing a frame rate that is somewhat decoupled from
+// the size of the display list ... the big problem I'm
+// having is the refresh rate beating against strong 60Hz
+// interference in my lab, so I'm trying to kick the refresh rate
+// away from multiples of 60Hz...
+
+#define FRAME_SYNC 0
+
 #define MAX_Z_LEVEL 0xfffu
 
 uint32_t line_dash[DISPLAY_LIST_MAX];
@@ -341,7 +351,7 @@ static uint8_t next[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,2
 
 #define ON 0x80u
 #define ENDCHAR 0xffu
-uint8_t chardata[] = {
+uint8_t font1[] = {
 		// cell is 6 wide by 10 high. baseline is y=2
 		// first byte, starting position
 		// subsequent bytes until 0: new position. ON = beam on
@@ -385,17 +395,42 @@ uint8_t chardata[] = {
 		'.', 0x32, ON|0x32, ENDCHAR,
 		'\'', 0x3a, ON|0x27, ENDCHAR
 };
+
+uint8_t seven_segment_font[] = {
+		' ', 0x00, ENDCHAR,
+		'0', 0x03, ON|0x06, 0x08, ON|0x0b, 0x1c, ON|0x4c, 0x5b, ON|0x58, 0x56, ON|0x53, 0x42, ON|0x12, ENDCHAR,
+		'1', 0x5b, ON|0x58, 0x56, ON|0x53, ENDCHAR,
+		'2', 0x03, ON|0x06, 0x1c, ON|0x4c, 0x5b, ON|0x58, 0x42, ON|0x12, 0x17, ON|0x47, ENDCHAR,
+		'3', 0x1c, ON|0x4c, 0x5b, ON|0x58, 0x56, ON|0x53, 0x42, ON|0x12, 0x17, ON|0x47, ENDCHAR,
+		'4', 0x08, ON|0x0b, 0x5b, ON|0x58, 0x56, ON|0x53, 0x17, ON|0x47, ENDCHAR,
+		'5', 0x08, ON|0x0b, 0x1c, ON|0x4c, 0x56, ON|0x53, 0x42, ON|0x12, 0x17, ON|0x47, ENDCHAR,
+		'6', 0x03, ON|0x06, 0x08, ON|0x0b, 0x1c, ON|0x4c, 0x56, ON|0x53, 0x42, ON|0x12, 0x17, ON|0x47, ENDCHAR,
+		'7', 0x1c, ON|0x4c, 0x5b, ON|0x58, 0x56, ON|0x53, ENDCHAR,
+		'8', 0x03, ON|0x06, 0x08, ON|0x0b, 0x1c, ON|0x4c, 0x5b, ON|0x58, 0x56, ON|0x53, 0x42, ON|0x12, 0x17, ON|0x47, ENDCHAR,
+		'9', 0x08, ON|0x0b, 0x1c, ON|0x4c, 0x5b, ON|0x58, 0x56, ON|0x53, 0x42, ON|0x12, 0x17, ON|0x47, ENDCHAR,
+		'A', 0x03, ON|0x06, 0x08, ON|0x0b, 0x1c, ON|0x4c, 0x5b, ON|0x58, 0x56, ON|0x53, 0x17, ON|0x47, ENDCHAR,
+		'B', 0x03, ON|0x06, 0x08, ON|0x0b, 0x56, ON|0x53, 0x42, ON|0x12, 0x17, ON|0x47, ENDCHAR,
+		'C', 0x03, ON|0x06, 0x08, ON|0x0b, 0x1c, ON|0x4c, 0x42, ON|0x12, ENDCHAR,
+		'D', 0x03, ON|0x06, 0x5b, ON|0x58, 0x56, ON|0x53, 0x42, ON|0x12, 0x17, ON|0x47, ENDCHAR,
+		'E', 0x03, ON|0x06, 0x08, ON|0x0b, 0x1c, ON|0x4c, 0x42, ON|0x12, 0x17, ON|0x47, ENDCHAR,
+		'F', 0x03, ON|0x06, 0x08, ON|0x0b, 0x1c, ON|0x4c, 0x17, ON|0x47, ENDCHAR,
+		'-', 0x17, ON|0x47, ENDCHAR,
+		'.', 0x32, ON|0x32, ENDCHAR,
+};
+
+uint8_t *current_font;
 uint16_t charmap[0x80];
 
-void index_chardata() {
+void index_chardata(uint8_t chardata[], size_t font_bytes) {
 	uint16_t i = 0;
-    while(i < sizeof(chardata)) {
+    while(i < font_bytes) {
     	charmap[ chardata[i] ] = i;
     	++i; // skip character marker
-    	while(i < sizeof(chardata) && chardata[i] != ENDCHAR)
+    	while(i < font_bytes && chardata[i] != ENDCHAR)
     		++i;
     	++i; // skip endchar marker
     }
+    current_font = chardata;
 }
 
 unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
@@ -404,7 +439,7 @@ unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
 		uint8_t *p;
 		unsigned i;
 
-		for(i = 0, p = chardata + charmap[*pc] + 1 ; *p != ENDCHAR ; ++p, ++i) {
+		for(i = 0, p = current_font + charmap[*pc] + 1 ; *p != ENDCHAR ; ++p, ++i) {
 			int posx = x + scale*((*p & 0x70) >> 4),
 				posy = y + scale*(*p & 0x0f);
 			if(i && (*p & ON)) {
@@ -422,7 +457,7 @@ unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
 void execute_line(unsigned i) {
 	static uint16_t last_pos_x, last_pos_y, last_z, last_xcoeff, last_ycoeff;
 
-	if(i == 0) {
+	if(FRAME_SYNC && i == 0) {
 		// Sync to timer interrupt
 		for(uint32_t current_tick = ticks; current_tick == ticks;)
 			;
@@ -461,6 +496,7 @@ void execute_line(unsigned i) {
 		spi(DAC_POS, pos_dac_y[i]);
 		last_pos_y = pos_dac_y[i];
 
+		four_microseconds();
 		four_microseconds();
 		four_microseconds();
 
@@ -519,7 +555,7 @@ void execute_line(unsigned i) {
 	// TODO: Although it's still unclear whether buffered/unbuffered affects this.
 
 	four_microseconds();
-	four_microseconds();
+	//four_microseconds();
 	//four_microseconds();
 
 
@@ -608,7 +644,8 @@ int main(void) {
     PIT_Init(PIT, &pitConfig);
 
     /* Set timer period for channel 0 */
-    PIT_SetTimerPeriod(PIT, kPIT_Chnl_0, 62500);// ~ 90Hz
+    // Bus Clock looks like 10 MHz... ?
+    PIT_SetTimerPeriod(PIT, kPIT_Chnl_0, 15625);
     //PIT_SetTimerPeriod(PIT, kPIT_Chnl_0, 83333); // ~ 120Hz
 
     /* Enable timer interrupts for channel 0 */
@@ -621,7 +658,7 @@ int main(void) {
     PIT_StartTimer(PIT, kPIT_Chnl_0);
 
 
-    index_chardata();
+    index_chardata(seven_segment_font, sizeof(seven_segment_font));
 
 
     #if 0 // Test sine wave and hold switch
@@ -720,9 +757,6 @@ int main(void) {
 
 	square:
 	if(0) {
-		// Benchmark, 4.7k integrating resistor, 816.8 fps (about 8,160 vectors/second)
-		// these are long vectors, about 6.5 divisions
-
 		// Note that X = 0 and Y = 0 correspond to Position DAC in mid-range, i.e. 1.25V
 		// DAC value = k*x0*0xfffu + 2048      or, k = 2048/(4095 * abs(max_x_y))
 		// The addressable range of Position DAC is therefore
@@ -759,15 +793,6 @@ int main(void) {
 	// Text demo
 
 	if(0) {
-		// Benchmark, 4.7k integrating resistor, 816.8 fps (about 8,160 vectors/second)
-		// these are long vectors, about 6.5 divisions
-
-		// Note that X = 0 and Y = 0 correspond to Position DAC in mid-range, i.e. 1.25V
-		// DAC value = k*x0*0xfffu + 2048      or, k = 2048/(4095 * abs(max_x_y))
-		// The addressable range of Position DAC is therefore
-		// -2048/(4095*k) .. (4095-2048)/(4095*k) ... if k = 1,   -0.5 .. +0.5
-		// The limit DAC (line endpoint, integrator stop) is intended to be in the same units
-
 		double k = 0.75;
 
 		unsigned j = 0;
@@ -896,6 +921,8 @@ int main(void) {
 	// Boxes demo
 
 	if(0) {
+		// These 400 short lines execute at about 50.74 Hz or about 20,200 vectors per second
+		// Integrating R: 15 kΩ  C: 0.1nF
 		unsigned j = 0;
 		for(int i = 0; i < 100; ++i) {
 			int x = ((i/10)-5)*300, y = ((i % 10)-5)*300;
@@ -985,7 +1012,13 @@ int main(void) {
 				setup_line(i, k, cos(a*i), sin(a*i), cos(a*(i+1)), sin(a*(i+1)), 0);
 			}
 			sprintf(s, "%d", n);
-			n = setup_text(n, (int)(k * -0.4 * 0xfff), (int)(k * -0.2 * 0xfff), 30, s);
+			n = setup_text(n, (int)(k * -0.4 * 0xfff), (int)(k * -0.2 * 0xfff), 36, s);
+
+			int r = rand();
+			sprintf(s, "%d", r);
+			n = setup_text(n, (int)(k * -0.4 * 0xfff), (int)(k * -0.35 * 0xfff), 16, s);
+			sprintf(s, "%X", r);
+			n = setup_text(n, (int)(k * -0.4 * 0xfff), (int)(k * -0.5 * 0xfff), 16, s);
 
 			for(unsigned j = 0; j < 1000; ++j) {
 				for(i = 0; i < n; ++i) {
@@ -1019,7 +1052,9 @@ int main(void) {
 
 	// diagonal_test
 
-	if(0) {
+	if(1) {
+		// Benchmark: 6951 Hz
+
 		// Note that X = 0 and Y = 0 correspond to Position DAC in mid-range, i.e. 1.25V
 		// DAC value = k*x0*0xfffu + 2048
 		// The addressable range of Position DAC is therefore
@@ -1047,8 +1082,9 @@ int main(void) {
 		}
 	}
 
-	if(0) {
+	if(1) {
 		// 12 x 12 maze
+		// Benchmark: 225.5 Hz, 74 vectors ~ 16,687 vectors/sec
 
 		double k = 0.0008;
 		setup_line(0,k,-591.5,540.0,-591.5,-324.0,0);
@@ -1143,9 +1179,8 @@ int main(void) {
 	}
 
 	if(1) {
-		// Benchmark on this maze: with 2.2k integrating resistors, 96.45 fps -- quality is rough
-		//                              4.7k, 89.41 fps -- acceptable quality (15,825 vectors/second)
-		//                              10k, 79.36 fps
+		// Benchmark: 107 Hz, 177 vectors, ~ 18,939 vectors/second
+		// Benefits from display list sorting
 
 		double k = 0.0008;
 
@@ -1625,18 +1660,22 @@ int main(void) {
 
 	// FLAG test
 
+	// 27 short/medium lines
+	// Benchmarks at 557.6 Hz or about 15,055 vectors per second
+
 	int gg = 0;
 
 	double k = 0.006;
+	unsigned j = 0;
 	for(unsigned i = 1; i < (2*N_POINTS-3); ++i) {
 		double x0, y0, x1, y1, kk = k;
 
 		x0 = wrapx(i);   y0 = wrapy(i);
 		x1 = wrapx(i+1); y1 = wrapy(i+1);
-		setup_line(i, kk, x0, y0, x1, y1, 0);
+		setup_line(j++, kk, x0, y0, x1, y1, 0);
 	}
 
-	for(unsigned f = 0; ; ++f) {
+	for(;;) {
 		/*
 		int g = (f >> 8) & 63;
 		if (g != gg) {
@@ -1644,7 +1683,7 @@ int main(void) {
 			k = g ? k*1.08 : 0.0002;
 			update_display_list(k);
 		}*/
-		for(unsigned i = 0; i < (2*N_POINTS-2); ++i) {
+		for(unsigned i = 0; i < j; ++i) {
 			// TODO: Try shuffling the lines randomly as a DAC stress test
 			execute_line(i);
 		}
