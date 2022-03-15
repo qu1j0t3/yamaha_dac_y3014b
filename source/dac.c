@@ -190,17 +190,30 @@ double wrapy(unsigned i) {
 
 #define MAX_Z_LEVEL 0xfffu
 
-uint32_t line_dash[DISPLAY_LIST_MAX];
+uint32_t line_dash_style[16] = {
+		0,
+		0b100100100100100100100100100100,
+		0b111110000011111000001111100000
+};
+
 uint16_t pos_dac_x[DISPLAY_LIST_MAX],
 		 pos_dac_y[DISPLAY_LIST_MAX],
 		 limit_dac[DISPLAY_LIST_MAX],
 		 xcoeff[DISPLAY_LIST_MAX],
 		 ycoeff[DISPLAY_LIST_MAX],
-		 line_limit_x[DISPLAY_LIST_MAX],
-		 line_limit_low[DISPLAY_LIST_MAX],
-		 line_active[DISPLAY_LIST_MAX],
-		 is_point[DISPLAY_LIST_MAX],
 		 line_z_dac[DISPLAY_LIST_MAX];
+
+uint8_t line_flags[DISPLAY_LIST_MAX]; // low 4 bits are dash style index (or dwell time, for points)
+
+#define LINE_LIMIT_X_MASK   0b00010000
+#define LINE_LIMIT_LOW_MASK 0b00100000
+#define LINE_ACTIVE_MASK    0b01000000
+#define IS_POINT_MASK       0b10000000
+
+#define LINE_LIMIT_X(i) (line_flags & LINE_LIMIT_X_MASK)
+#define LINE_LIMIT_LOW(i) (line_flags & LINE_LIMIT_LOW_MASK)
+#define LINE_ACTIVE(i) (line_flags & LINE_ACTIVE_MASK)
+#define IS_POINT(i) (line_flags & IS_POINT_MASK)
 
 volatile uint32_t ticks;
 
@@ -247,17 +260,25 @@ void shuffle_display_list(uint16_t count, uint16_t perm[]) {
                                  but hardware has 8 bit precision
  */
 
-unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel, uint8_t slow) {
+unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint8_t dash, uint16_t zlevel, uint8_t slow) {
 	int dx = x1-x0, dy = y1-y0, posx, posy;
 	double len = sqrt((double)dx*(double)dx + (double)dy*(double)dy);
 
 	// treat very short lines as points (since crt cannot resolve anyway)
 	// can be calibrated using short lines test pattern below
 	// at some point around length 7 units, lines start to lose brightness
-	is_point[i] = len < 2.0;
+
 	line_z_dac[i] = DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | zlevel;
 
-	if (is_point[i]) {
+	unsigned line_limit_x = abs(dx) > abs(dy);
+
+	int larger_delta = line_limit_x ? dx : dy;
+
+	unsigned line_limit_low = larger_delta > 0;
+
+	unsigned is_point = len < 2.0;
+
+	if (is_point) {
 		posx = 2048 - (x0+x1)/2;
 		posy = 2048 - (y0+y1)/2;
 	} else {
@@ -266,8 +287,6 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 
 		posx = 2048 - x0;
 		posy = 2048 - y0;
-
-		line_dash[i] = dash;
 
 		// DAC Datasheet output swing = typ 0.01 to Vdd-0.04
 		// When powered from USB, Vdd can swing as low as 4.53V-4.80V in my setup (usb hub with other devices connected)
@@ -279,15 +298,9 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 		xcoeff[i] = DAC_A | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((c*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
 		ycoeff[i] = DAC_B | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
 
-		line_limit_x[i] = abs(dx) > abs(dy); // set if X is faster changing integrator
-
-		int larger_delta = line_limit_x[i] ? dx : dy;
-
-		line_limit_low[i] = larger_delta > 0; // set if the integrator is decreasing (coefficient positive)
-
 		uint16_t delta = (uint16_t)abs(larger_delta)/2;
 		uint16_t clamp;
-		if (line_limit_low[i]) {
+		if (line_limit_low) {
 			// limit = 2048 - delta
 			clamp = delta > 2048 ? 0 : 2048 - delta;
 		} else {
@@ -309,7 +322,7 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 		int32_t limit_min = (int32_t)( (0.05/5.0)*0xfffu );
 		uint16_t clamped = limit; //(uint16_t)( limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit) );*/
 
-		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamp );
+		limit_dac[i] = (uint16_t)( (line_limit_x ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamp );
 	}
 
 	pos_dac_x[i] = DAC_A | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posx;
@@ -317,7 +330,15 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 
 	// suppress lines that push DACs out of bounds
 	// TODO: proper clipping
-	return line_active[i] = posx >= 0 && posx < 0x1000 && posy >= 0 && posy < 0x1000;
+	unsigned active = posx >= 0 && posx < 0x1000 && posy >= 0 && posy < 0x1000;
+
+	line_flags[i] = (is_point ? IS_POINT_MASK : 0)
+				  | (active ? LINE_ACTIVE_MASK : 0)
+			      | (line_limit_x ? LINE_LIMIT_X_MASK : 0)      // set if X is faster changing integrator
+			      | (line_limit_low ? LINE_LIMIT_LOW_MASK : 0) // set if the integrator is decreasing (coefficient positive))
+				  | dash;
+
+	return active;
 }
 
 unsigned setup_line_int(unsigned i, int x0, int y0, int x1, int y1, uint32_t dash, uint16_t zlevel, uint8_t slow) {
@@ -463,14 +484,14 @@ void execute_line(unsigned i) {
 			;
 	}
 
-	if(!line_active[i]) return;
+	if(!(line_flags[i] & LINE_ACTIVE_MASK)) return;
 
 	if (line_z_dac[i] != last_z) {
 		spi(DAC_Z, line_z_dac[i]);
 		last_z = line_z_dac[i];
 	}
 
-	if (is_point[i]) {
+	if (line_flags[i] & IS_POINT_MASK) {
 		// Assume this initial state
 		//BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 
@@ -504,7 +525,8 @@ void execute_line(unsigned i) {
 	    BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 	    BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
-		delay(line_dash[i] ? line_dash[i] : 20); // This duration can be adjusted!
+	    unsigned dwell = (line_flags[i] & 0xf) << 2;
+		delay(dwell ? dwell : 20); // This duration can be adjusted!
 
 		// Blank Z
 	    BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
@@ -565,7 +587,7 @@ void execute_line(unsigned i) {
 
 	// Arm comparator on the fastest-changing integrator
 	// (greater magnitude coefficient of X and Y)
-	if(line_limit_x[i]) {
+	if(line_flags[i] & LINE_LIMIT_X_MASK) {
 		BOARD_INITPINS_X_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
 		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
 	} else {
@@ -573,11 +595,13 @@ void execute_line(unsigned i) {
 		BOARD_INITPINS_Y_COMP_SEL_FGPIO->PSOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
 	}
 
-    if(line_limit_low[i]) {
+    if(line_flags[i] & LINE_LIMIT_LOW_MASK) {
     	BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
     } else {
     	BOARD_INITPINS_LIMIT_LOW_FGPIO->PSOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
     }
+
+    uint32_t dash = line_dash_style[line_flags[i] & 0xf];
 
     if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
@@ -591,9 +615,9 @@ void execute_line(unsigned i) {
 
 	// Wait integrating time
 
-	if (line_dash[i]) {
+	if (dash) {
 		for(uint32_t dash_mask = 0; BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK; dash_mask = next[dash_mask]) {
-			if(line_dash[i] & (1u << dash_mask)) {
+			if(dash & (1u << dash_mask)) {
 				BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 			} else {
 				BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
@@ -764,21 +788,19 @@ int main(void) {
 		// The limit DAC (line endpoint, integrator stop) is intended to be in the same units
 
 		double k = 0.75;
-		uint32_t dash = 0b100100100100100100100100100100;
-		uint32_t dash2 = 0b111110000011111000001111100000;
 		unsigned j = 0;
 		setup_line(j++, k, -.5, -.5, +.5, -.5, 0);
 		setup_line(j++, k, +.5, -.5, +.5, +.5, 0);
 		setup_line(j++, k, +.5, +.5, -.5, +.5, 0);
 		setup_line(j++, k, -.5, +.5, -.5, -.5, 0);
 
-		setup_line(j++, k, -.4, +.5, -.4, -.5, dash);
+		setup_line(j++, k, -.4, +.5, -.4, -.5, 1);
 		setup_line(j++, k, +.4, +.5, +.4, -.5, 0);
-		setup_line(j++, k,   0, +.5,   0, -.5, dash2);
+		setup_line(j++, k,   0, +.5,   0, -.5, 2);
 
-		setup_line(j++, k, -.5, -.4, +.5, -.4, dash);
+		setup_line(j++, k, -.5, -.4, +.5, -.4, 1);
 		setup_line(j++, k, -.5, +.4, +.5, +.4, 0);
-		setup_line(j++, k, -.5,   0, +.5,   0, dash2);
+		setup_line(j++, k, -.5,   0, +.5,   0, 2);
 
 		setup_line(j++, k, -.25,-.25,+.25,+.25, 0);
 		setup_line(j++, k, -.25,+.25,+.25,-.25, 0);
@@ -891,7 +913,8 @@ int main(void) {
 						int b = (abs(rand()) % (square*2)) - square;
 						int c = (abs(rand()) % (square*2)) - square;
 						int d = (abs(rand()) % (square*2)) - square;
-						setup_line_int(j++, a, b, c, d, 0, MAX_Z_LEVEL, 0);
+						int dash = rand() & 2;
+						setup_line_int(j++, a, b, c, d, dash, MAX_Z_LEVEL, 0);
 						// Marking line endpoints with a dot helps test
 						// position DACs against integrators and limit.
 						//        A starburst might be a better test of angle dependent error
@@ -900,8 +923,8 @@ int main(void) {
 					} else { // stars
 						int xx = (abs(rand()) % (square*2)) - square;
 						int yy = (abs(rand()) % (square*2)) - square;
-						line_dash[j] = rand() & 2 ? 2 : 20; // relative brightness (dwell time)
-						setup_line_int(j++, xx, yy, xx, yy, 0, MAX_Z_LEVEL, 0);
+						int dash = rand() & 2 ? 1 : 5; // relative brightness (dwell time)
+						setup_line_int(j++, xx, yy, xx, yy, dash, MAX_Z_LEVEL, 0);
 					}
 				}
 
