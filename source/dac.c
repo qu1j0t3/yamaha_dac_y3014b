@@ -73,7 +73,7 @@ void four_microseconds() { // Tuned for Release configuration only!
 #define DAC_B      (1u << 15)
 
 // control
-#define DAC_BUFFERED (1u << 14)
+#define DAC_BUFFERED (1u << 14) // Since we do not buffer the DAC Vrefs off chip, should always be configured buffered
 #define DAC_UNBUFFERED 0u
 #define DAC_GAINx2   0u
 #define DAC_GAINx1   (1u << 13)
@@ -276,8 +276,8 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 		// N.B. This is best verified by using the Starburst test below. When Vdd is too low,
 		//      coefficient error near Vdd causes lines to meet and cross some distance from the centre of the pattern.
 		//      When the full coefficient range is available, lines should meet close to the centre.
-		xcoeff[i] = DAC_A | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((c*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
-		ycoeff[i] = DAC_B | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
+		xcoeff[i] = DAC_A | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((c*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
+		ycoeff[i] = DAC_B | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
 
 		line_limit_x[i] = abs(dx) > abs(dy); // set if X is faster changing integrator
 
@@ -309,11 +309,11 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint32_t da
 		int32_t limit_min = (int32_t)( (0.05/5.0)*0xfffu );
 		uint16_t clamped = limit; //(uint16_t)( limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit) );*/
 
-		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_UNBUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamp );
+		limit_dac[i] = (uint16_t)( (line_limit_x[i] ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamp );
 	}
 
-	pos_dac_x[i] = DAC_A | DAC_UNBUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posx;
-	pos_dac_y[i] = DAC_B | DAC_UNBUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posy;
+	pos_dac_x[i] = DAC_A | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posx;
+	pos_dac_y[i] = DAC_B | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posy;
 
 	// suppress lines that push DACs out of bounds
 	// TODO: proper clipping
@@ -690,8 +690,8 @@ int main(void) {
     if (0) {
 		for(;;) {
 
-			spi(DAC_POS, DAC_A | DAC_GAINx2 | DAC_UNBUFFERED | DAC_ACTIVE | (0xfffu*4/5) /* ~ 4V */ ); // One of these calls is about 7.5µs
-			spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_UNBUFFERED | DAC_ACTIVE | (0xfffu*4/5) /* ~ 2V */ ); // Slew rate is about 0.53 V/µs so about 3.8µs for full scale at GAIN x1
+			spi(DAC_POS, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | (0xfffu*4/5) /* ~ 4V */ ); // One of these calls is about 7.5µs
+			spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | (0xfffu*4/5) /* ~ 2V */ ); // Slew rate is about 0.53 V/µs so about 3.8µs for full scale at GAIN x1
 			BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 
 
@@ -699,8 +699,8 @@ int main(void) {
 			four_microseconds();
 			BOARD_INITPINS_TRIGGER_GPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
 
-			spi(DAC_POS, DAC_A | DAC_GAINx2 | DAC_UNBUFFERED | DAC_ACTIVE | 0);
-			spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_UNBUFFERED | DAC_ACTIVE | 0);
+			spi(DAC_POS, DAC_A | DAC_GAINx2 | DAC_BUFFERED | DAC_ACTIVE | 0);
+			spi(DAC_POS, DAC_B | DAC_GAINx1 | DAC_BUFFERED | DAC_ACTIVE | 0);
 
 			four_microseconds();
 		}
