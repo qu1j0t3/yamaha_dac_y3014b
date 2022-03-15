@@ -616,6 +616,11 @@ void execute_line(unsigned i) {
 	// Wait integrating time
 
 	if (dash) {
+		// If an interrupt occurs in the wait loop,
+		// the dash pattern will visibly shimmer.
+		// So they must be disabled:
+		PIT_DisableInterrupts(PIT, kPIT_Chnl_0, kPIT_TimerInterruptEnable);
+
 		for(uint32_t dash_mask = 0; BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK; dash_mask = next[dash_mask]) {
 			if(dash & (1u << dash_mask)) {
 				BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
@@ -626,6 +631,8 @@ void execute_line(unsigned i) {
 		// it may be important to leave this in a known state
 		// (debugging weird flashes at the end of the dashed lines)
 		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
+	    PIT_EnableInterrupts(PIT, kPIT_Chnl_0, kPIT_TimerInterruptEnable);
 	} else {
 		// solid line
 		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
