@@ -42,6 +42,47 @@
 // Copyright (C) 2018-2022 Toby Thain <toby@telegraphics.com.au>
 // Code for Freedom KE06Z board (converted to 5V operation)
 
+// GPIO map for PCB - Arduino Uno R3
+//
+// (NXP)      R3?     STM32    (Duemilanove)
+// -----------------------------------------
+// NC         NC      NC       No socket
+// P3V3_      IOREF   IOREF    No socket
+// RESET      RESET   NRST     RESET       6     (POWER)
+// P3V3       --      3V3      3V3         5
+// P5V_USB    5V      5V       5V          4
+// GND        GND     GND      GND         3
+// GND        --      GND      GND?        2
+// P5-9V_VIN  VIN     VIN      VIN         1     Put jumper on PCB from +5
+//    (no socket)
+// PTF7       C0      PA0      A0 PC0 (J2) 6     NOTCS_DAC_0_GPIO_PIN_MASK
+// PTC0       C1      PA1      A1 PC1      5     NOTCS_DAC_1_GPIO_PIN_MASK
+// PTC1       C2      PA4      A2 PC2      4     NOTCS_DAC_COEFF_GPIO_PIN_MASK
+// PTC2       C3      PB0      A3 PC3      3     STOP_GPIO_PIN_MASK
+// PTC3       C4      PC1/PB9  A4 PC4      2     -- Utility  - Put test point on PCB
+// PTF6       C5      PC0/PA15 A5 PC5      1     -- Utility  - Put test point on PCB
+//
+// PTA3       D15     PB8      No socket
+// PTA2       D14     PB9      No socket
+// AREF       AREF    VREF+    AREF  (J3)     8
+// GND        GND     GND      GND            7
+// PTB2       B5      PA5      D13 PB5 (SCK)  6  SPI_CLOCK_GPIO_PIN_MASK
+// PTB4       B4      PA6      D12 PB4 (MISO) 5
+// PTB3       B3      PA7      D11 PB3 (MOSI) 4  SPI_DATAOUT_GPIO_PIN_MASK
+// PTB5       B2      PB6      D10 PB2 (SS)   3
+// PTH0       B1      PC7      D9  PB1        2  INT_RESET_GPIO_PIN_MASK (a - optional)
+// PTA0       B0      PA9      D8  PB0        1  -- Utility  - Put test point on PCB
+//  (note, not 0.1" spacing between headers!)
+// PTA7       D7      PA8      D7 PD7  (J1)   8  Z_ENABLE_GPIO_PIN_MASK   (a - optional)
+// PTB4       D6      PB10     D6 PD6         7  LIMIT_LOW_GPIO_PIN_MASK  (a)
+// PTD1       D5      PB4      D5 PD5         6  X_COMP_SEL_GPIO_PIN_MASK (a)
+// PTA1       D4      PB5      D4 PD4         5  Y_COMP_SEL_GPIO_PIN_MASK (a)
+// PTD0       D3      PB3      D3 PD3         4  INT_HOLD_GPIO_PIN_MASK (a)
+// PTD5       D2      PA10     D2 PD2         3  Z_BLANK_GPIO_PIN_MASK (a)
+// PTB1       D1      PA2/PC4  D1 PD1 (TX)    2  -- Utility  - Put test point on PCB
+// PTB0       D0      PA3/PC5  D0 PD0 (RX)    1  -- Utility  - Put test point on PCB
+
+
 #include <math.h>
 
 #define M_PI        3.14159265358979323846264338327950288   /* pi             */
@@ -193,7 +234,8 @@ double wrapy(unsigned i) {
 uint32_t line_dash_style[16] = {
 		0,
 		0b100100100100100100100100100100,
-		0b111110000011111000001111100000
+		0b111110000011111000001111100000,
+		~0b110000000011000000001100000000
 };
 
 uint16_t pos_dac_x[DISPLAY_LIST_MAX],
@@ -644,15 +686,12 @@ void execute_line(unsigned i) {
 
 	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
-	// Disarm comparator
     BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
 	// As soon as beam is off, we can short the integrator
     // Based on measurements, reset takes about 14µs
 	BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 }
-
-
 
 int main(void) {
 
@@ -679,6 +718,7 @@ int main(void) {
     PIT_SetTimerPeriod(PIT, kPIT_Chnl_0, 15625);
     //PIT_SetTimerPeriod(PIT, kPIT_Chnl_0, 83333); // ~ 120Hz
 
+#if FRAME_SYNC
     /* Enable timer interrupts for channel 0 */
     PIT_EnableInterrupts(PIT, kPIT_Chnl_0, kPIT_TimerInterruptEnable);
 
@@ -687,9 +727,9 @@ int main(void) {
 
     /* Start channel 0 */
     PIT_StartTimer(PIT, kPIT_Chnl_0);
+#endif
 
-
-    index_chardata(seven_segment_font, sizeof(seven_segment_font));
+    index_chardata(font1, sizeof(font1));
 
 
     #if 0 // Test sine wave and hold switch
@@ -715,6 +755,13 @@ int main(void) {
         }
     }
 	#endif
+
+    if(0) {
+    	// Set utility pin high, to measure voltage and test division to 3.3v
+		BOARD_INITPINS_TRIGGER_GPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK;
+		for(;;)
+			;
+    }
 
     // Test SPI DAC MCP4922
 
@@ -900,7 +947,7 @@ int main(void) {
 
 	// Stars demo
 
-	if(1) {
+	if(0) {
 		unsigned items = 100;
 		uint16_t perm[items];
 
@@ -944,6 +991,56 @@ int main(void) {
 
 			for(unsigned i = 0; i < j; ++i) {
 				execute_line(perm[i]);
+			}
+		}
+	}
+
+	if (1) {
+		// Cubic Bézier, de Casteljau method
+		double tol = 2;
+		double tolerance = 16*tol*tol;
+
+		for(;;) {
+			unsigned j = 0;
+			void curve(int depth, double x0, double y0, double x1, double y1, double x2, double y2, double x3, double y3){
+				if(depth == 0) {
+					setup_line_int(j++, (int)x0, (int)y0, (int)x1, (int)y1, 3, MAX_Z_LEVEL, 0);
+					setup_line_int(j++, (int)x2, (int)y2, (int)x3, (int)y3, 3, MAX_Z_LEVEL, 0);
+					setup_line_int(j++, (int)x1, (int)y1, (int)x1, (int)y1, 0, MAX_Z_LEVEL, 0);
+					setup_line_int(j++, (int)x2, (int)y2, (int)x2, (int)y2, 0, MAX_Z_LEVEL, 0);
+				}
+
+				// compute flatness
+				double ux=3*x1-2*x0-x3; ux *= ux;
+				double uy=3*y1-2*y0-y3; uy *= uy;
+				double vx=3*x2-2*x3-x0; vx *= vx;
+				double vy=3*y2-2*y3-y0; vy *= vy;
+				if (ux < vx) ux = vx;
+				if (uy < vy) uy = vy;
+
+				if (ux+uy <= tolerance) {
+					setup_line_int(j++, (int)x0, (int)y0, (int)x3, (int)y3, 0, MAX_Z_LEVEL, 0);
+				} else if (j < DISPLAY_LIST_MAX) {
+					double l1x=(x0+x1)/2, l1y=(y0+y1)/2;
+					double xm=(x1+x2)/2, ym=(y1+y2)/2;
+					double l2x=(l1x+xm)/2, l2y=(l1y+ym)/2;
+					double r2x=(x2+x3)/2, r2y=(y2+y3)/2;
+					double r1x=(r2x+xm)/2, r1y=(r2y+ym)/2;
+					double l3x=(l2x+r1x)/2, l3y=(l2y+r1y)/2;
+
+					curve(depth+1, x0, y0, l1x, l1y, l2x, l2y, l3x, l3y);
+					curve(depth+1, l3x, l3y, r1x, r1y, r2x, r2y, x3, y3);
+				}
+			}
+
+			int rnd(){ return (abs(rand()) % 3400) - 1700; }
+
+			curve(0, rnd(), rnd(), rnd(), rnd(), rnd(), rnd(), rnd(), rnd());
+
+			for(int k = 1500; --k;) {
+				for(unsigned i = 0; i < j; ++i) {
+					execute_line(i);
+				}
 			}
 		}
 	}
@@ -1393,7 +1490,7 @@ int main(void) {
 		setup_line(176,k,-244.590909090909,526.909090909091,-244.590909090909,572.7272727272727,0);
 
 		uint16_t perm[177];
-		for(unsigned i = 0; i < 177; ++i) {
+		for(uint16_t i = 0; i < 177; ++i) {
 			perm[i] = i;
 		}
 		//shuffle_display_list(177, perm);
