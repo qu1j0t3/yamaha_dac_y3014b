@@ -997,15 +997,20 @@ int main(void) {
 
 	if (1) {
 		// Cubic Bézier, de Casteljau method
+		// as described by "Piecewise Linear Approximation of Bézier Curves", Kaspar Fischer
 		double tol = 2;
-		double tolerance = 16*tol*tol;
+		double tolerance = 32*tol*tol;
 
 		for(;;) {
 			unsigned j = 0;
 			void curve(int depth, double x0, double y0, double x1, double y1, double x2, double y2, double x3, double y3){
+
+				double l1x=(x0+x1)/2, l1y=(y0+y1)/2;
+				double r2x=(x2+x3)/2, r2y=(y2+y3)/2;
+
 				if(depth == 0) {
-					setup_line_int(j++, (int)x0, (int)y0, (int)x1, (int)y1, 3, MAX_Z_LEVEL, 0);
-					setup_line_int(j++, (int)x2, (int)y2, (int)x3, (int)y3, 3, MAX_Z_LEVEL, 0);
+					setup_line_int(j++, (int)l1x, (int)l1y, (int)x1, (int)y1, 3, MAX_Z_LEVEL, 0);
+					setup_line_int(j++, (int)x2, (int)y2, (int)r2x, (int)r2y, 3, MAX_Z_LEVEL, 0);
 					setup_line_int(j++, (int)x1, (int)y1, (int)x1, (int)y1, 0, MAX_Z_LEVEL, 0);
 					setup_line_int(j++, (int)x2, (int)y2, (int)x2, (int)y2, 0, MAX_Z_LEVEL, 0);
 				}
@@ -1021,10 +1026,8 @@ int main(void) {
 				if (ux+uy <= tolerance) {
 					setup_line_int(j++, (int)x0, (int)y0, (int)x3, (int)y3, 0, MAX_Z_LEVEL, 0);
 				} else if (j < DISPLAY_LIST_MAX) {
-					double l1x=(x0+x1)/2, l1y=(y0+y1)/2;
 					double xm=(x1+x2)/2, ym=(y1+y2)/2;
 					double l2x=(l1x+xm)/2, l2y=(l1y+ym)/2;
-					double r2x=(x2+x3)/2, r2y=(y2+y3)/2;
 					double r1x=(r2x+xm)/2, r1y=(r2y+ym)/2;
 					double l3x=(l2x+r1x)/2, l3y=(l2y+r1y)/2;
 
@@ -1196,16 +1199,14 @@ int main(void) {
 		// limit should be target delta voltage (x1 or y1), biased by 2.5v which is the integrator "zero"
 		//   int32_t limit = (int32_t)( (0.5 - k*larger_delta/2.0) * 0xfffu );
 		// = (0.5 - 0.125) * 5.0
-		setup_line(0, k, 0, 0.95, 1, 0, 0);
-		setup_line(1, k, 0, 0, .5, .475, 0);
+		unsigned j = 0;
+		setup_line(j++, k, 0, 0.95, 1, 0, 0);
+		//setup_line(j++, k, 0, 0, .5, .475, 0);
 		//setup_line(2, k, 1, 0, 1+0.05*(0-1), 0+0.05*(0.95-0));
 		//setup_line(3, k, .5, .475, .5+0.05*(0-.5), .475+0.05*(0-.475));
 
-		for(;;) {
-			execute_line(0);
-			execute_line(1);
-			execute_line(2);
-			execute_line(3);
+		for(unsigned i = 0; i < j;) {
+			execute_line(i);
 		}
 	}
 
@@ -1292,7 +1293,7 @@ int main(void) {
 		// Sorting the display list can help speed up DAC settling
 		// but really we shouldn't depend on it.
 		uint16_t perm[74];
-		for(unsigned i = 0; i < 74; ++i) {
+		for(uint16_t i = 0; i < 74; ++i) {
 			perm[i] = i;
 		}
 		//shuffle_display_list(74, perm);
