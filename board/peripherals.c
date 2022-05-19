@@ -63,10 +63,10 @@ instance:
     - tpm_config:
       - clockSource: 'kTPM_SystemClock'
       - tpmSrcClkFreq: 'BOARD_BootClockRUN'
-      - prescale: 'kTPM_Prescale_Divide_128'
-      - timerFrequency: '120'
+      - prescale: 'kTPM_Prescale_Divide_1'
+      - timerFrequency: '10000'
     - timer_interrupts: ''
-    - enable_irq: 'true'
+    - enable_irq: 'false'
     - tpm_interrupt:
       - IRQn: 'FTM0_IRQn'
       - enable_interrrupt: 'enabled'
@@ -74,19 +74,18 @@ instance:
       - priority: '0'
       - enable_custom_name: 'false'
     - EnableTimerInInit: 'true'
+    - quick_selection: 'QuickSelectionDefault'
   - tpm_edge_aligned_mode:
     - tpm_edge_aligned_channels_config: []
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
 /* clang-format on */
 const tpm_config_t FTM0_config = {
-  .prescale = kTPM_Prescale_Divide_128,
+  .prescale = kTPM_Prescale_Divide_1,
 };
 
 static void FTM0_init(void) {
   TPM_Init(FTM0_PERIPHERAL, &FTM0_config);
-  TPM_SetTimerPeriod(FTM0_PERIPHERAL, ((FTM0_CLOCK_SOURCE/ (1U << (FTM0_PERIPHERAL->SC & TPM_SC_PS_MASK))) / 120) + 1);
-  /* Enable interrupt FTM0_IRQn request in the NVIC. */
-  EnableIRQ(FTM0_IRQN);
+  TPM_SetTimerPeriod(FTM0_PERIPHERAL, ((FTM0_CLOCK_SOURCE/ (1U << (FTM0_PERIPHERAL->SC & TPM_SC_PS_MASK))) / 10000) + 1);
   TPM_StartTimer(FTM0_PERIPHERAL, kTPM_SystemClock);
 }
 

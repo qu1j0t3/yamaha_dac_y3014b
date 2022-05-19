@@ -44,31 +44,31 @@ void BOARD_InitBootPins(void);
   @{ */
 
 /* Symbols to be used with GPIO driver */
-#define BOARD_INITPINS_Y_INT_RESET_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
-#define BOARD_INITPINS_Y_INT_RESET_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
-#define BOARD_INITPINS_Y_INT_RESET_GPIO_PORT kGPIO_PORTC    /*!<@brief PORTA GPIO port: PORTA */
-#define BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK (1U << 19U) /*!<@brief GPIO pin mask */
+#define BOARD_INITPINS_INT_RESET_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_INT_RESET_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_INT_RESET_GPIO_PORT kGPIO_PORTC    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_INT_RESET_GPIO_PIN_MASK (1U << 19U) /*!<@brief GPIO pin mask */
 
 /* Symbols to be used with PORT driver */
-#define BOARD_INITPINS_Y_INT_RESET_PORT PORTC               /*!<@brief PORT peripheral base pointer */
-#define BOARD_INITPINS_Y_INT_RESET_PIN 3U                   /*!<@brief PORT pin number */
-#define BOARD_INITPINS_Y_INT_RESET_PIN_MASK (1U << 3U)      /*!<@brief PORT pin mask */
-                                                            /* @} */
+#define BOARD_INITPINS_INT_RESET_PORT PORTC               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_INT_RESET_PIN 3U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_INT_RESET_PIN_MASK (1U << 3U)      /*!<@brief PORT pin mask */
+                                                          /* @} */
 
 /*! @name PORTD7 (number 26), Y_INT_HOLD/J1[5]/PTD7_TXD2
   @{ */
 
 /* Symbols to be used with GPIO driver */
-#define BOARD_INITPINS_Y_INT_HOLD_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
-#define BOARD_INITPINS_Y_INT_HOLD_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
-#define BOARD_INITPINS_Y_INT_HOLD_GPIO_PORT kGPIO_PORTD    /*!<@brief PORTA GPIO port: PORTA */
-#define BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK (1U << 31U) /*!<@brief GPIO pin mask */
+#define BOARD_INITPINS_INT_HOLD_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_INT_HOLD_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_INT_HOLD_GPIO_PORT kGPIO_PORTD    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK (1U << 31U) /*!<@brief GPIO pin mask */
 
 /* Symbols to be used with PORT driver */
-#define BOARD_INITPINS_Y_INT_HOLD_PORT PORTD               /*!<@brief PORT peripheral base pointer */
-#define BOARD_INITPINS_Y_INT_HOLD_PIN 7U                   /*!<@brief PORT pin number */
-#define BOARD_INITPINS_Y_INT_HOLD_PIN_MASK (1U << 7U)      /*!<@brief PORT pin mask */
-                                                           /* @} */
+#define BOARD_INITPINS_INT_HOLD_PORT PORTD               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_INT_HOLD_PIN 7U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_INT_HOLD_PIN_MASK (1U << 7U)      /*!<@brief PORT pin mask */
+                                                         /* @} */
 
 /*! @name PORTC0 (number 32), TRIGGER/J3[4]/PTC0_A1
   @{ */
@@ -190,21 +190,6 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_Y_COMP_SEL_PIN_MASK (1U << 5U)      /*!<@brief PORT pin mask */
                                                            /* @} */
 
-/*! @name PORTB2 (number 40), J2[12]/J2[1]/PTB2_D13_T3
-  @{ */
-
-/* Symbols to be used with GPIO driver */
-#define BOARD_INITPINS_STOP_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
-#define BOARD_INITPINS_STOP_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
-#define BOARD_INITPINS_STOP_GPIO_PORT kGPIO_PORTB    /*!<@brief PORTA GPIO port: PORTA */
-#define BOARD_INITPINS_STOP_GPIO_PIN_MASK (1U << 10U) /*!<@brief GPIO pin mask */
-
-/* Symbols to be used with PORT driver */
-#define BOARD_INITPINS_STOP_PORT PORTB               /*!<@brief PORT peripheral base pointer */
-#define BOARD_INITPINS_STOP_PIN 2U                   /*!<@brief PORT pin number */
-#define BOARD_INITPINS_STOP_PIN_MASK (1U << 2U)      /*!<@brief PORT pin mask */
-                                                     /* @} */
-
 /*! @name PORTH0 (number 19), J2[4]/PTH0_D9_PWM0
   @{ */
 
@@ -234,6 +219,30 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_Z_ENABLE_PIN 7U                   /*!<@brief PORT pin number */
 #define BOARD_INITPINS_Z_ENABLE_PIN_MASK (1U << 7U)      /*!<@brief PORT pin mask */
                                                          /* @} */
+
+/*! @name PORTC2 (number 25), X_INT_RESET/J3[8]/PTC2_A3
+  @{ */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_STOP_INT_PORT PORTC               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_STOP_INT_PIN 2U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_STOP_INT_PIN_MASK (1U << 2U)      /*!<@brief PORT pin mask */
+                                                         /* @} */
+
+/*! @name PORTB2 (number 40), J2[12]/J2[1]/PTB2_D13_T3
+  @{ */
+
+/* Symbols to be used with GPIO driver */
+#define BOARD_INITPINS_STOP_FGPIO FGPIOA             /*!<@brief FGPIO peripheral base pointer */
+#define BOARD_INITPINS_STOP_GPIO GPIOA               /*!<@brief GPIO peripheral base pointer */
+#define BOARD_INITPINS_STOP_GPIO_PORT kGPIO_PORTB    /*!<@brief PORTA GPIO port: PORTA */
+#define BOARD_INITPINS_STOP_GPIO_PIN_MASK (1U << 10U) /*!<@brief GPIO pin mask */
+
+/* Symbols to be used with PORT driver */
+#define BOARD_INITPINS_STOP_PORT PORTB               /*!<@brief PORT peripheral base pointer */
+#define BOARD_INITPINS_STOP_PIN 2U                   /*!<@brief PORT pin number */
+#define BOARD_INITPINS_STOP_PIN_MASK (1U << 2U)      /*!<@brief PORT pin mask */
+                                                     /* @} */
 
 /*!
  * @brief Configures pin routing and optionally pin electrical features.

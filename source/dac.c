@@ -318,7 +318,7 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint8_t das
 
 	unsigned line_limit_low = larger_delta > 0;
 
-	unsigned is_point = len < 2.0;
+	unsigned is_point = larger_delta == 0;
 
 	if (is_point) {
 		posx = 2048 - (x0+x1)/2;
@@ -540,7 +540,7 @@ void execute_line(unsigned i) {
 		BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
 		// Set HOLD LOW (integrators disconnected)
-	    BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
+	    BOARD_INITPINS_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
 		// When both comparators are deselected, COMP_LIMIT is LOW.
 	    BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
@@ -623,7 +623,7 @@ void execute_line(unsigned i) {
 	//four_microseconds();
 
 
-	BOARD_INITPINS_Y_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
+	BOARD_INITPINS_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
 
 	// UNBLANK
 
@@ -649,7 +649,7 @@ void execute_line(unsigned i) {
 
     BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 
-	BOARD_INITPINS_Y_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
+	BOARD_INITPINS_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
 
 	// All the above takes about 30-32 µs
@@ -686,11 +686,11 @@ void execute_line(unsigned i) {
 
 	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 
-    BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
+    BOARD_INITPINS_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
 	// As soon as beam is off, we can short the integrator
     // Based on measurements, reset takes about 14µs
-	BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+	BOARD_INITPINS_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 }
 
 int main(void) {
@@ -791,8 +791,8 @@ int main(void) {
 	// - for mid-intensity control, a Z level of 0.25V should produce a visible trace.
 
 	if(0) {
-		BOARD_INITPINS_Y_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_Y_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
-		BOARD_INITPINS_Y_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_Y_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+		BOARD_INITPINS_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
+		BOARD_INITPINS_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 
 		// When both comparators are deselected, COMP_LIMIT is LOW.
 		BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
