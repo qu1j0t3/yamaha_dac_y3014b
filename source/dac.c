@@ -216,7 +216,7 @@ double wrapy(unsigned i) {
   return py[i < N_POINTS ? i : N_POINTS + N_POINTS - i - 2];
 }
 
-#define DISPLAY_LIST_MAX 450
+#define DISPLAY_LIST_MAX 150
 #define NORMALISE_DIRECTIONS 0
 
 // If FRAME_SYNC is 1, then the execution of the display list
@@ -246,6 +246,9 @@ uint16_t pos_dac_x[DISPLAY_LIST_MAX],
 		 line_z_dac[DISPLAY_LIST_MAX];
 
 uint8_t line_flags[DISPLAY_LIST_MAX]; // low 4 bits are dash style index (or dwell time, for points)
+
+#define COARSE_POINT_MAX 5000
+uint8_t ptx[COARSE_POINT_MAX], pty[COARSE_POINT_MAX];
 
 #define LINE_LIMIT_X_MASK   0b00010000
 #define LINE_LIMIT_LOW_MASK 0b00100000
@@ -515,6 +518,44 @@ unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
 		x += scale*9; // advance to the right by one character position
 	}
 	return idx;
+}
+
+// Instead of the vector display list with its precomputed DAC words,
+// use the ptx[] and pty[] arrays (compact display list of points)
+void execute_pt(unsigned i) {
+	static uint16_t last_pos_x, last_pos_y;
+
+	uint16_t dac_x = DAC_A | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)(2048 + (((int)ptx[i] - 128)*48));
+	uint16_t dac_y = DAC_B | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)(2048 - (((int)pty[i] - 128)*48));
+
+	int dly = abs(dac_x - last_pos_x);
+	if (abs(dac_y - last_pos_y) > dly) {
+		dly = abs(dac_y - last_pos_y);
+	}
+
+	if (dac_x != last_pos_x) {
+		spi(DAC_POS, dac_x);
+		last_pos_x = dac_x;
+	}
+
+	if (dac_y != last_pos_y) {
+		spi(DAC_POS, dac_y);
+		last_pos_y = dac_y;
+	}
+
+	// This delay depends greatly on the amount
+	// of voltage slew the DAC needs to do
+	// Note op amp slew is also involved! (summing amp)
+	// dly is the change in DAC value (max 4096)
+	delay(dly/4);
+
+	// Unblank Z
+    BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
+	delay(20); // This duration can be adjusted!
+
+	// Blank Z
+    BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 }
 
 void execute_line(unsigned i) {
@@ -991,6 +1032,122 @@ int main(void) {
 
 			for(unsigned i = 0; i < j; ++i) {
 				execute_line(perm[i]);
+			}
+		}
+	}
+
+#define width_words 2
+#define height_rows 64
+#define word_bits (sizeof(uint32_t)*8)
+#define width_cells (width_words*word_bits)
+	if (1) {
+		// Game of Life demo
+		// Soundtrack: https://open.spotify.com/track/0M1KXfcj2aMICn33PtxLqJ?si=129f143640e149d6
+
+		// Amusingly if the display list has only points, and no lines,
+		// the integrators will drift because they're never reset.
+		// Can either add at least one line to the display list,
+		// or force a reset:
+
+		BOARD_INITPINS_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+
+		static uint32_t gen0[width_words * height_rows], gen1[width_words * height_rows], *current_gen, *next_gen;
+		srand(1984);
+
+		for(int m = 0;; ++m) {
+			if ((m % 400) == 0) {
+				for(unsigned i = 0; i < width_words * height_rows; ++i) {
+					gen0[i] = rand() & rand();
+				}
+				current_gen = gen0;
+				next_gen = gen1;
+			}
+			// Generate point list for rendering
+
+			unsigned j = 0;
+			for(unsigned row = 0; row < height_rows; row++) {
+				for(unsigned col = 0; col < width_cells; col++) {
+					if (j < COARSE_POINT_MAX) {
+						if(current_gen[row*width_words + col/word_bits] & (1 << (word_bits - 1 - (col % word_bits)))) {
+							ptx[j] = (uint8_t)(col - width_cells/2 + 128);
+							pty[j] = (uint8_t)(row - height_rows/2 + 128);
+							++j;
+						}
+					} else {
+						goto refresh;
+					}
+				}
+			}
+
+			// Compute next gen from current gen
+
+			for(int row = 0; row < height_rows; row++) {
+				for(unsigned word_idx = 0; word_idx < width_words; ++word_idx) {
+					unsigned n = 0;
+					uint32_t nhood[8];
+
+					// Build up the binary neighbourhood in an array of up to 8 words
+
+					for(int d = -1; d <= 1; ++d) {
+						if (row+d > 1 && row+d < height_rows-1) {
+							unsigned offset = width_words*(unsigned)(row+d) + word_idx;
+
+							uint32_t wl = word_idx > 0 ? current_gen[offset - 1] : 0;
+							uint32_t w = current_gen[offset];
+							uint32_t wr = word_idx < width_words-1 ? current_gen[offset + 1] : 0;
+
+							nhood[n++] = (w << 1) | (wr >> (word_bits-1));
+							if (d) nhood[n++] = w;
+							nhood[n++] = (w >> 1) | (wl << (word_bits-1));
+						}
+					}
+
+					// For each bit in the word to be computed, sum neighbours
+
+					uint32_t v = 0; // start with all cells in word dead
+					for(uint32_t mask = 0x80000000; mask; mask >>= 1) {
+						unsigned cnt = 0;
+						for(unsigned k = 0; k < n; ++k) {
+							if (nhood[k] & mask) ++cnt;
+						}
+						if (cnt == 2) { // keep cell state
+							v |= current_gen[width_words*(unsigned)row + word_idx] & mask;
+						} else if (cnt == 3) { // birth
+							v |= mask;
+						}
+					}
+					next_gen[width_words*(unsigned)row + word_idx] = v;
+				}
+			}
+
+			uint32_t *temp = current_gen;
+			current_gen = next_gen;
+			next_gen = temp;
+
+			char s[20];
+		refresh:
+			sprintf(s, "POP: %d", j);
+			unsigned jj = setup_text(0, -1500, -1800, 24, s);
+			for(unsigned frame = 3; frame--;) {
+				// Set up all XOR inputs so that Z_BLANK can be used to modulate Z
+
+			    BOARD_INITPINS_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
+			    BOARD_INITPINS_X_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_X_COMP_SEL_GPIO_PIN_MASK;
+				BOARD_INITPINS_Y_COMP_SEL_FGPIO->PCOR = BOARD_INITPINS_Y_COMP_SEL_GPIO_PIN_MASK;
+				BOARD_INITPINS_LIMIT_LOW_FGPIO->PCOR = BOARD_INITPINS_LIMIT_LOW_GPIO_PIN_MASK;
+
+				BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
+				// Turn on Z output amplifier
+				BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+
+				for(unsigned i = 0; i < j; ++i) {
+					execute_pt(i);
+				}
+
+				for(unsigned i = 0; i < jj; ++i) {
+					execute_line(i);
+				}
 			}
 		}
 	}
