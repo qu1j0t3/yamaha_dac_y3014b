@@ -1127,15 +1127,16 @@ int main(void) {
 
 			unsigned j = 0;
 			for(unsigned row = 0; row < height_rows; row++) {
-				for(unsigned col = 0; col < width_cells; col++) {
-					if (j < COARSE_POINT_MAX) {
-						if(current_gen[row*width_words + col/word_bits] & (1 << (word_bits - 1 - (col % word_bits)))) {
-							ptx[j] = (uint8_t)(col - width_cells/2 + 128);
-							pty[j] = (uint8_t)(row - height_rows/2 + 128);
-							++j;
+				for(unsigned i = 0; i < width_words; i++) {
+					uint32_t w = current_gen[row*width_words + i];
+					if (w && j < COARSE_POINT_MAX-word_bits) {
+						for(unsigned k = word_bits-1; k--;) {
+							if (w & (1L << k)) {
+								pty[j] = (uint8_t)(row - height_rows/2 + 128);
+								ptx[j] = (uint8_t)(i*word_bits + word_bits - k - width_cells/2 + 128);
+								++j;
+							}
 						}
-					} else {
-						goto refresh;
 					}
 				}
 			}
@@ -1146,6 +1147,7 @@ int main(void) {
 				for(unsigned word_idx = 0; word_idx < width_words; ++word_idx) {
 					unsigned n = 0;
 					uint32_t nhood[8];
+					uint32_t occupied_cols = 0;
 
 					// Build up the binary neighbourhood in an array of up to 8 words
 
@@ -1160,27 +1162,40 @@ int main(void) {
 							// Only collect non-zero words for counting
 
 							nhood[n] = (w << 1) | (wr >> (word_bits-1));
-							if (nhood[n]) ++n;
+							if (nhood[n]) {
+								occupied_cols |= nhood[n];
+								++n;
+							}
 
-							if (d && w) nhood[n++] = w;
+							if (d && w) {
+								occupied_cols |= w;
+								nhood[n++] = w;
+							}
 
 							nhood[n] = (w >> 1) | (wl << (word_bits-1));
-							if (nhood[n]) ++n;
+							if (nhood[n]) {
+								occupied_cols |= nhood[n];
+								++n;
+							}
 						}
 					}
 
 					// For each bit in the word to be computed, sum neighbours
 
 					uint32_t v = 0; // start with all cells in word dead
-					for(uint32_t mask = 0x80000000; mask; mask >>= 1) {
-						unsigned cnt = 0;
-						for(unsigned k = 0; k < n; ++k) {
-							if (nhood[k] & mask) ++cnt;
-						}
-						if (cnt == 2) { // keep cell state
-							v |= current_gen[width_words*(unsigned)row + word_idx] & mask;
-						} else if (cnt == 3) { // birth
-							v |= mask;
+					if (occupied_cols) {
+						for(uint32_t mask = 0x80000000; mask; mask >>= 1) {
+							if (occupied_cols & mask) {
+								unsigned cnt = 0;
+								for(unsigned k = 0; k < n; ++k) {
+									if (nhood[k] & mask) ++cnt;
+								}
+								if (cnt == 2) { // keep cell state
+									v |= current_gen[width_words*(unsigned)row + word_idx] & mask;
+								} else if (cnt == 3) { // birth
+									v |= mask;
+								}
+							}
 						}
 					}
 					next_gen[width_words*(unsigned)row + word_idx] = v;
