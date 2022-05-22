@@ -554,6 +554,8 @@ void execute_pt(unsigned i) {
     BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 }
 
+volatile unsigned stop_flag;
+
 void execute_line(unsigned i) {
 	static uint16_t last_pos_x, last_pos_y, last_z, last_xcoeff, last_ycoeff;
 
@@ -688,8 +690,26 @@ void execute_line(unsigned i) {
 
     if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
-    BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 
+
+    // Z = Z_ENABLE & (HOLD ^ Z_BLANK ^ LIMIT_LOW ^ STOP)
+    // HOLD is 0 between lines
+    // Z_ENABLE is 0 between lines (master switch on output)
+    // LIMIT_LOW ^ STOP should be 1 right now
+    // Set conditions so that HOLD going high unblanks
+
+	BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+
+	BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
+
+	// If an interrupt occurs in the wait loop,
+	// the dash pattern will visibly shimmer.
+	// So they must be disabled.
+	// FIXME: In fact this interrupt is not needed at all during display list execution.
+	PIT_DisableInterrupts(PIT, kPIT_Chnl_0, kPIT_TimerInterruptEnable);
+
+	//stop_flag = 0;
+	//KBI_EnableInterrupts(KBI0);// This is quite slow
 	BOARD_INITPINS_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
 
@@ -699,11 +719,6 @@ void execute_line(unsigned i) {
 	// Wait integrating time
 
 	if (dash) {
-		// If an interrupt occurs in the wait loop,
-		// the dash pattern will visibly shimmer.
-		// So they must be disabled:
-		PIT_DisableInterrupts(PIT, kPIT_Chnl_0, kPIT_TimerInterruptEnable);
-
 		for(uint32_t dash_mask = 0; BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK; dash_mask = next[dash_mask]) {
 			if(dash & (1u << dash_mask)) {
 				BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
@@ -718,7 +733,7 @@ void execute_line(unsigned i) {
 	    PIT_EnableInterrupts(PIT, kPIT_Chnl_0, kPIT_TimerInterruptEnable);
 	} else {
 		// solid line
-		BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+		//while(!stop_flag) ;
 		while(BOARD_INITPINS_STOP_FGPIO->PDIR & BOARD_INITPINS_STOP_GPIO_PIN_MASK)
 			;
 	}
@@ -745,15 +760,11 @@ void PIT_CH0_IRQHandler(void)
     __DSB();
 }
 
-volatile unsigned stop_flag;
-
 void KBI0_IRQHandler(void)
 {
     if (KBI_IsInterruptRequestDetected(KBI0))
     {
-        /* Disable interrupts. */
         KBI_DisableInterrupts(KBI0);
-        /* Clear status. */
         KBI_ClearInterruptFlag(KBI0);
         stop_flag = true;
     }
@@ -779,7 +790,7 @@ int main(void) {
     kbi_config_t kbiConfig;
 
     kbiConfig.mode = kKBI_EdgesDetect;
-    kbiConfig.pinsEnabled = 1 << 18; // STOPINT connected to PORTC2 which is KBI0 pin 18 (?)
+    kbiConfig.pinsEnabled = KBI_PE_KBIPE(1L << 18); // STOPINT connected to PORTC2 which is KBI0 pin 18 (?)
     kbiConfig.pinsEdge = 0; // all edge detect
     KBI_Init(KBI0, &kbiConfig);
 
