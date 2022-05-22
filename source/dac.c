@@ -35,6 +35,7 @@
 #include "fsl_debug_console.h"
 #include "fsl_gpio.h"
 #include "fsl_pit.h"
+#include "fsl_kbi.h"
 
 #include "pin_mux.h"
 #include "clock_config.h"
@@ -261,16 +262,6 @@ uint8_t ptx[COARSE_POINT_MAX], pty[COARSE_POINT_MAX];
 #define IS_POINT(i) (line_flags & IS_POINT_MASK)
 
 volatile uint32_t ticks;
-
-void PIT_CH0_IRQHandler(void)
-{
-    PIT_ClearStatusFlags(PIT, kPIT_Chnl_0, kPIT_TimerFlag);
-
-    ++ticks;
-
-    __DSB();
-}
-
 
 int compar_func(const void *pa, const void *pb) {
 	uint16_t a = *(const uint16_t*)pa;
@@ -743,17 +734,54 @@ void execute_line(unsigned i) {
 	BOARD_INITPINS_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
 }
 
-int main(void) {
 
-    /* Structure of initialize PIT */
+
+void PIT_CH0_IRQHandler(void)
+{
+    PIT_ClearStatusFlags(PIT, kPIT_Chnl_0, kPIT_TimerFlag);
+
+    ++ticks;
+
+    __DSB();
+}
+
+volatile unsigned stop_flag;
+
+void KBI0_IRQHandler(void)
+{
+    if (KBI_IsInterruptRequestDetected(KBI0))
+    {
+        /* Disable interrupts. */
+        KBI_DisableInterrupts(KBI0);
+        /* Clear status. */
+        KBI_ClearInterruptFlag(KBI0);
+        stop_flag = true;
+    }
+/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
+  exception return operation might vector to incorrect interrupt */
+#if defined __CORTEX_M && (__CORTEX_M == 4U)
+    __DSB();
+#endif
+}
+
+int main(void) {
     pit_config_t pitConfig;
 
+    gpio_pin_config_t config = {
+        kGPIO_DigitalOutput, 0,
+    };
 
-    /* Init the boards */
     BOARD_InitPins();
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
-    BOARD_InitLEDsPins();
+
+    // Configure Keyboard Interrupt for STOP signal (falling edge)
+    kbi_config_t kbiConfig;
+
+    kbiConfig.mode = kKBI_EdgesDetect;
+    kbiConfig.pinsEnabled = 1 << 18; // STOPINT connected to PORTC2 which is KBI0 pin 18 (?)
+    kbiConfig.pinsEdge = 0; // all edge detect
+    KBI_Init(KBI0, &kbiConfig);
 
     /*
      * pitConfig.enableRunInDebug = false;
