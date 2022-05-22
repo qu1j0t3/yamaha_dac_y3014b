@@ -1049,6 +1049,7 @@ int main(void) {
 #define height_rows 64
 #define word_bits (sizeof(uint32_t)*8)
 #define width_cells (width_words*word_bits)
+#define GENERATION_RESET 400
 	if (1) {
 		// Game of Life demo
 		// Soundtrack: https://open.spotify.com/track/0M1KXfcj2aMICn33PtxLqJ?si=129f143640e149d6
@@ -1064,13 +1065,25 @@ int main(void) {
 		srand(1984);
 
 		for(int m = 0;; ++m) {
-			if ((m % 400) == 0) {
+			if ((m % GENERATION_RESET) == 0) {
+				// Every GENERATION_RESET generations, reset to a random field
 				for(unsigned i = 0; i < width_words * height_rows; ++i) {
-					gen0[i] = rand() & rand();
+					gen0[i] = rand() & rand() & rand(); // 12.5% density
 				}
+				/*
+				for(unsigned i = 0; i < width_words * height_rows; ++i) {
+					gen0[i] = 0;
+				}
+
+				unsigned k = width_words*height_rows/2 + width_words/2 - 1;
+				gen0[k]               = 0b011; // R-pentomino
+				gen0[k+width_words]   = 0b110; // https://bitstorm.org/gameoflife/lexicon/#rax
+				gen0[k+width_words*2] = 0b010;
+				*/
 				current_gen = gen0;
 				next_gen = gen1;
 			}
+
 			// Generate point list for rendering
 
 			unsigned j = 0;
@@ -1105,9 +1118,15 @@ int main(void) {
 							uint32_t w = current_gen[offset];
 							uint32_t wr = word_idx < width_words-1 ? current_gen[offset + 1] : 0;
 
-							nhood[n++] = (w << 1) | (wr >> (word_bits-1));
-							if (d) nhood[n++] = w;
-							nhood[n++] = (w >> 1) | (wl << (word_bits-1));
+							// Only collect non-zero words for counting
+
+							nhood[n] = (w << 1) | (wr >> (word_bits-1));
+							if (nhood[n]) ++n;
+
+							if (d && w) nhood[n++] = w;
+
+							nhood[n] = (w >> 1) | (wl << (word_bits-1));
+							if (nhood[n]) ++n;
 						}
 					}
 
@@ -1135,7 +1154,7 @@ int main(void) {
 
 			char s[20];
 		refresh:
-			sprintf(s, "POP: %d", j);
+			sprintf(s, "GEN%4d POP%4d", m % GENERATION_RESET, j);
 			unsigned jj = setup_text(0, -1500, -1800, 24, s);
 			for(unsigned frame = 3; frame--;) {
 				// Set up all XOR inputs so that Z_BLANK can be used to modulate Z
