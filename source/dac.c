@@ -526,6 +526,10 @@ unsigned setup_text(unsigned idx, int x, int y, int scale, char *s) {
 void execute_pt(unsigned i) {
 	static uint16_t last_pos_x, last_pos_y;
 
+	if (i == 0) { // reset state at start of display list
+		last_pos_x = last_pos_y = 0;
+	}
+
 	uint16_t dac_x = DAC_A | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)(2048 + (((int)ptx[i] - 128)*48));
 	uint16_t dac_y = DAC_B | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)(2048 - (((int)pty[i] - 128)*48));
 
@@ -561,6 +565,10 @@ void execute_pt(unsigned i) {
 
 void execute_line(unsigned i) {
 	static uint16_t last_pos_x, last_pos_y, last_z, last_xcoeff, last_ycoeff;
+
+	if (i == 0) { // reset state at start of display list
+		last_pos_x = last_pos_y = last_z = last_xcoeff = last_ycoeff = 0;
+	}
 
 	if(FRAME_SYNC && i == 0) {
 		// Sync to timer interrupt
