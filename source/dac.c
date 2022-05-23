@@ -524,7 +524,7 @@ void execute_pt(unsigned i) {
 	uint16_t dac_x = DAC_A | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)(2048 + (((int)ptx[i] - 128)*48));
 	uint16_t dac_y = DAC_B | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)(2048 - (((int)pty[i] - 128)*48));
 
-	int dly = abs(dac_x - last_pos_x);
+	unsigned dly = abs(dac_x - last_pos_x);
 	if (abs(dac_y - last_pos_y) > dly) {
 		dly = abs(dac_y - last_pos_y);
 	}
@@ -570,12 +570,12 @@ void execute_line(unsigned i) {
 	}
 
 	if(!(line_flags[i] & LINE_ACTIVE_MASK)) return;
-
+/*
 	if (line_z_dac[i] != last_z) {
 		spi(DAC_Z, line_z_dac[i]);
 		last_z = line_z_dac[i];
 	}
-
+*/
 	if (line_flags[i] & IS_POINT_MASK) {
 		// Assume this initial state
 		//BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
@@ -688,33 +688,34 @@ void execute_line(unsigned i) {
 
     uint32_t dash = line_dash_style[line_flags[i] & 0xf];
 
+
+	// If an interrupt occurs in the wait loop, the dash pattern will visibly shimmer.
+	// So they must be disabled.
+	PIT_DisableInterrupts(PIT, kPIT_Chnl_0, kPIT_TimerInterruptEnable);
+
+
     if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
 
-
-    // Z = Z_ENABLE & (HOLD ^ Z_BLANK ^ LIMIT_LOW ^ STOP)
+    // Z = Z_ENABLE & (HOLD ^ Z_BLANK ^ STOP)
     // HOLD is 0 between lines
-    // Z_ENABLE is 0 between lines (master switch on output)
+    // STOP should be a don't-care because Z_ENABLE = 0
+
+    // During line drawing: HOLD = 1, STOP = 1
+    // Z = 1 & Z_BLANK
+
+    // Z_ENABLE is master switch on output
     // LIMIT_LOW ^ STOP should be 1 right now
     // Set conditions so that HOLD going high unblanks
 
-	BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
-
-	BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
-
-	// If an interrupt occurs in the wait loop,
-	// the dash pattern will visibly shimmer.
-	// So they must be disabled.
-	// FIXME: In fact this interrupt is not needed at all during display list execution.
-	PIT_DisableInterrupts(PIT, kPIT_Chnl_0, kPIT_TimerInterruptEnable);
 
 	//stop_flag = 0;
 	//KBI_EnableInterrupts(KBI0);// This is quite slow
+	BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
+	BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 	BOARD_INITPINS_INT_HOLD_FGPIO->PSOR = BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK; // Close HOLD switch Y
 
-
 	// All the above takes about 30-32 µs
-
 
 	// Wait integrating time
 
@@ -740,16 +741,14 @@ void execute_line(unsigned i) {
 
 	BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK; // Make sure Z stays blanked when HOLD is made low
 
-	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
-
     BOARD_INITPINS_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
 
 	// As soon as beam is off, we can short the integrator
     // Based on measurements, reset takes about 14µs
 	BOARD_INITPINS_INT_RESET_FGPIO->PSOR = BOARD_INITPINS_INT_RESET_GPIO_PIN_MASK; // Close INT RESET switch
+
+	BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
 }
-
-
 
 void PIT_CH0_IRQHandler(void)
 {
@@ -1220,7 +1219,7 @@ int main(void) {
 
 				BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
-				// Turn on Z output amplifier
+				// Turn on Z output switch
 				BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 
 				for(unsigned i = 0; i < j; ++i) {
