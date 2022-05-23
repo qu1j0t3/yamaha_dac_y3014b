@@ -1146,7 +1146,7 @@ int main(void) {
 				for(unsigned i = 0; i < width_words; i++) {
 					uint32_t w = current_gen[row*width_words + i];
 					if (w && j < COARSE_POINT_MAX-word_bits) {
-						for(unsigned k = word_bits-1; k--;) {
+						for(unsigned k = word_bits; k--;) {
 							if (w & (1L << k)) {
 								pty[j] = (uint8_t)(row + yoffset);
 								ptx[j] = (uint8_t)(i*word_bits - k + xoffset);
@@ -1226,7 +1226,7 @@ int main(void) {
 		refresh:
 			sprintf(s, "GEN%4d POP%4d", m % GENERATION_RESET, j);
 			unsigned jj = 0;
-			int x0=48*(xoffset-128-word_bits-1), y0=48*(yoffset-128), x1 = 48*(xoffset-128-word_bits-1+64), y1=48*(yoffset-128+64);
+			int x0=48*(xoffset-128-word_bits-1), y0=48*(yoffset-128), x1 = 48*(xoffset-128-word_bits+64), y1=48*(yoffset-128+64);
 			setup_line_int(jj++, x0, y0, x1, y0, 0, MAX_Z_LEVEL, 0);
 			setup_line_int(jj++, x1, y0, x1, y1, 0, MAX_Z_LEVEL, 0);
 			setup_line_int(jj++, x1, y1, x0, y1, 0, MAX_Z_LEVEL, 0);
