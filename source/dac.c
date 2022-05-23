@@ -1102,6 +1102,9 @@ int main(void) {
 		static uint32_t gen0[width_words * height_rows], gen1[width_words * height_rows], *current_gen, *next_gen;
 		srand(1984);
 
+		unsigned yoffset = 128 - height_rows/2;
+		unsigned xoffset = 128 + word_bits - width_cells/2;
+
 		for(int m = 0;; ++m) {
 			if ((m % GENERATION_RESET) == 0) {
 				// Every GENERATION_RESET generations, reset to a random field
@@ -1131,8 +1134,8 @@ int main(void) {
 					if (w && j < COARSE_POINT_MAX-word_bits) {
 						for(unsigned k = word_bits-1; k--;) {
 							if (w & (1L << k)) {
-								pty[j] = (uint8_t)(row - height_rows/2 + 128);
-								ptx[j] = (uint8_t)(i*word_bits + word_bits - k - width_cells/2 + 128);
+								pty[j] = (uint8_t)(row + yoffset);
+								ptx[j] = (uint8_t)(i*word_bits - k + xoffset);
 								++j;
 							}
 						}
@@ -1208,8 +1211,14 @@ int main(void) {
 			char s[20];
 		refresh:
 			sprintf(s, "GEN%4d POP%4d", m % GENERATION_RESET, j);
-			unsigned jj = setup_text(0, -1500, -1800, 24, s);
-			for(unsigned frame = 3; frame--;) {
+			unsigned jj = 0;
+			int x0=48*(xoffset-128-word_bits-1), y0=48*(yoffset-128), x1 = 48*(xoffset-128-word_bits-1+64), y1=48*(yoffset-128+64);
+			setup_line_int(jj++, x0, y0, x1, y0, 0, MAX_Z_LEVEL, 0);
+			setup_line_int(jj++, x1, y0, x1, y1, 0, MAX_Z_LEVEL, 0);
+			setup_line_int(jj++, x1, y1, x0, y1, 0, MAX_Z_LEVEL, 0);
+			setup_line_int(jj++, x0, y1, x0, y0, 0, MAX_Z_LEVEL, 0);
+			jj = setup_text(jj, -1500, -1800, 20, s);
+			for(unsigned frame = 5; frame--;) {
 				// Set up all XOR inputs so that Z_BLANK can be used to modulate Z
 
 			    BOARD_INITPINS_INT_HOLD_FGPIO->PCOR = BOARD_INITPINS_INT_HOLD_GPIO_PIN_MASK; // Open HOLD switch Y
