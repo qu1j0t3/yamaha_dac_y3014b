@@ -248,6 +248,9 @@ uint16_t pos_dac_x[DISPLAY_LIST_MAX],
 
 uint8_t line_flags[DISPLAY_LIST_MAX]; // low 4 bits are dash style index (or dwell time, for points)
 
+int limit_adj_units_x = -2;
+int limit_adj_units_y = -11;
+
 #define COARSE_POINT_MAX 5000
 uint8_t ptx[COARSE_POINT_MAX], pty[COARSE_POINT_MAX];
 
@@ -318,7 +321,12 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint8_t das
 		posx = 2048 - (x0+x1)/2;
 		posy = 2048 - (y0+y1)/2;
 	} else {
+		// Note that the Limit DAC adjustment/calibration
+		// fixes the quality issue for small text, so this shouldn't be needed.
+		// This function also changes the brightness of the text
+		// relative to ordinary lines.
 		double speed = slow ? 0.5 : 1.0; // This is mostly intended to help text quality, by slowing down the integrators for short lines
+
 		double c = dx/len, s = dy/len;
 
 		posx = 2048 - x0;
@@ -335,7 +343,7 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint8_t das
 		ycoeff[i] = DAC_B | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
 
 		uint16_t delta = (uint16_t)abs(larger_delta)/2;
-		uint16_t clamp;
+		int clamp;
 		if (line_limit_low) {
 			// limit = 2048 - delta
 			clamp = delta > 2048 ? 0 : 2048 - delta;
@@ -358,7 +366,13 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint8_t das
 		int32_t limit_min = (int32_t)( (0.05/5.0)*0xfffu );
 		uint16_t clamped = limit; //(uint16_t)( limit < limit_min ? limit_min : (limit > limit_max ? limit_max : limit) );*/
 
-		limit_dac[i] = (uint16_t)( (line_limit_x ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | clamp );
+		// The limit DAC may have an offset relative to position DAC,
+		// which leads lines to overshoot or undershoot their limit.
+		// Add a correction which can either be manually measured with DVM,
+		// or self calibrated (TODO).
+		clamp += line_limit_x ? limit_adj_units_x : limit_adj_units_y;
+
+		limit_dac[i] = (uint16_t)( (line_limit_x ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)clamp );
 	}
 
 	pos_dac_x[i] = DAC_A | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posx;
