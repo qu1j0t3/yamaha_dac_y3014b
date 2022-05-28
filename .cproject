@@ -675,7 +675,7 @@
 	<storageModule moduleId="com.nxp.mcuxpresso.core.datamodels">
 		<sdkName>SDK_2.x_FRDM-KE06Z</sdkName>
 		<sdkVersion>2.5.0</sdkVersion>
-		<sdkComponents>platform.drivers.clock.MKE06Z4;platform.Include_common.MKE06Z4;platform.Include_core_cm0plus.MKE06Z4;platform.devices.MKE06Z4_CMSIS.MKE06Z4;platform.drivers.common.MKE06Z4;platform.devices.MKE06Z4_startup.MKE06Z4;platform.drivers.uart.MKE06Z4;platform.drivers.port_ke06.MKE06Z4;platform.drivers.gpio_1.MKE06Z4;platform.utilities.debug_console.MKE06Z4;frdmke06z_gpio_1_led_output;middleware.baremetal.MKE06Z4;component.uart_adapter.MKE06Z4;component.serial_manager.MKE06Z4;component.serial_manager_uart.MKE06Z4;utility.debug_console.MKE06Z4;device.MKE06Z4_CMSIS.MKE06Z4;platform.drivers.pit.MKE06Z4;platform.drivers.kbi.MKE06Z4;</sdkComponents>
+		<sdkComponents>platform.drivers.clock.MKE06Z4;platform.Include_common.MKE06Z4;platform.Include_core_cm0plus.MKE06Z4;platform.devices.MKE06Z4_CMSIS.MKE06Z4;platform.drivers.common.MKE06Z4;platform.devices.MKE06Z4_startup.MKE06Z4;platform.drivers.uart.MKE06Z4;platform.drivers.port_ke06.MKE06Z4;platform.drivers.gpio_1.MKE06Z4;platform.utilities.debug_console.MKE06Z4;frdmke06z_gpio_1_led_output;middleware.baremetal.MKE06Z4;component.uart_adapter.MKE06Z4;component.serial_manager.MKE06Z4;component.serial_manager_uart.MKE06Z4;utility.debug_console.MKE06Z4;device.MKE06Z4_CMSIS.MKE06Z4;platform.drivers.tpm.MKE06Z4;platform.drivers.pit.MKE06Z4;</sdkComponents>
 		<boardId>frdmke06z</boardId>
 		<package>MKE06Z128VLK4</package>
 		<core>cm0plus</core>

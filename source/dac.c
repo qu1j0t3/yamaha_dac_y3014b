@@ -92,14 +92,21 @@
 
 #define DEG2RAD(d) (2.0*M_PI*(d)/360.0)
 
+
+// Release Configuration:
+
+//delay(0); // approx 7-8 ns
+//delay(100); // approx 12.56µs
+//delay(1000); // approx 125µs
+
 void delay(unsigned j) {
-    for (uint32_t i = 0; i < j; ++i) { //  500 => ~163µs
+    for (uint32_t i = 0; i < j; ++i) {
         __asm("NOP"); /* delay */
     }
 }
 
 void four_microseconds() { // Tuned for Release configuration only!
-    for (uint32_t i = 0; i < 30; ++i) { //  500 => ~163µs
+    for (uint32_t i = 0; i < 32; ++i) {
         __asm("NOP"); /* delay */
     }
 }
@@ -165,6 +172,7 @@ void spi(unsigned cs, uint16_t word) {
 	__asm("NOP");__asm("NOP");__asm("NOP");__asm("NOP");
 
 	// Note that DAC takes approx 4.5µs to slew 2.5V   ; 7.2µs to slew 4.4v
+	// This is in line with datasheet slew rate of 0.55V/µs
 }
 
 #define SINCOS_POINTS 8         // multiple of 4
@@ -217,16 +225,14 @@ double wrapy(unsigned i) {
   return py[i < N_POINTS ? i : N_POINTS + N_POINTS - i - 2];
 }
 
-#define DISPLAY_LIST_MAX 150
+#define DISPLAY_LIST_MAX 450
 #define NORMALISE_DIRECTIONS 0
+#define VARIABLE_SETTLING 0  // need to benchmark this
 
 // If FRAME_SYNC is 1, then the execution of the display list
 // will wait until at least one PIT tick has elapsed (see init code),
 // producing a frame rate that is somewhat decoupled from
-// the size of the display list ... the big problem I'm
-// having is the refresh rate beating against strong 60Hz
-// interference in my lab, so I'm trying to kick the refresh rate
-// away from multiples of 60Hz...
+// the size of the display list
 
 #define FRAME_SYNC 0
 
@@ -246,10 +252,11 @@ uint16_t pos_dac_x[DISPLAY_LIST_MAX],
 		 ycoeff[DISPLAY_LIST_MAX],
 		 line_z_dac[DISPLAY_LIST_MAX];
 
-uint8_t line_flags[DISPLAY_LIST_MAX]; // low 4 bits are dash style index (or dwell time, for points)
+uint8_t line_flags[DISPLAY_LIST_MAX], // low 4 bits are dash style index (or dwell time, for points)
+		settle_delay[DISPLAY_LIST_MAX]; // parameter for delay()
 
-int limit_adj_units_x = -2;
-int limit_adj_units_y = -11;
+int limit_adj_units_x = -5;
+int limit_adj_units_y = -12;
 
 #define COARSE_POINT_MAX 5000
 uint8_t ptx[COARSE_POINT_MAX], pty[COARSE_POINT_MAX];
@@ -300,6 +307,17 @@ void shuffle_display_list(uint16_t count, uint16_t perm[]) {
  */
 
 unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint8_t dash, uint16_t zlevel, uint8_t slow) {
+
+	// VARIABLE_SETTLING is an EXPERIMENTAL optimisation that precomputes
+	// a settling delay for DAC setup before each line.
+	// CAREFUL: This assumes that the display list is not going to be permuted in any way!
+	// Also it doesn't seem to be a very powerful optimisation
+
+	static uint16_t last_pos_x, last_pos_y, last_z, last_xcoeff, last_ycoeff, last_limit_x, last_limit_y;
+	if (i == 0) {
+		last_pos_x = last_pos_y = last_z = last_xcoeff = last_ycoeff = last_limit_x = last_limit_y = 0;
+	}
+
 	int dx = x1-x0, dy = y1-y0, posx, posy;
 	double len = sqrt((double)dx*(double)dx + (double)dy*(double)dy);
 
@@ -316,6 +334,12 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint8_t das
 	unsigned line_limit_low = larger_delta > 0;
 
 	unsigned is_point = larger_delta == 0;
+
+
+	// x coeff and y coeff and limit DAC use the DAC gain x 2 ... i.e. slew volts = 2 * 2.5 * delta/4096
+	// x pos and y pos use the DAC gain x 1                   ... i.e. slew volts =     2.5 * delta/4096
+
+	unsigned max_slew = 0; // this is in gain x 1 units
 
 	if (is_point) {
 		posx = 2048 - (x0+x1)/2;
@@ -339,8 +363,34 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint8_t das
 		// N.B. This is best verified by using the Starburst test below. When Vdd is too low,
 		//      coefficient error near Vdd causes lines to meet and cross some distance from the centre of the pattern.
 		//      When the full coefficient range is available, lines should meet close to the centre.
-		xcoeff[i] = DAC_A | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((c*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
-		ycoeff[i] = DAC_B | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)((s*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
+
+		// Update: Even when analog section is powered from a regulated 5V supply,
+		//         0.9 x full scale is about the maximum we can do before beginning to hit nonlinearity.
+
+		// Integrator Vin = max 2.25V above "zero"
+		// R = 15kΩ   C = 10nF
+		// dV/dt = 2.25 / (15000*0.00000001) V/second = 0.015 V/µs
+
+		unsigned xcf = (unsigned)((c*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
+		unsigned ycf = (unsigned)((s*speed*0.9/2.0 + 0.5)*0xfff + 0.5);
+
+		int dxc = 2*(xcf - last_xcoeff);
+		if (!VARIABLE_SETTLING || dxc) {
+			xcoeff[i] = DAC_A | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)xcf;
+			last_xcoeff = xcf;
+			if(abs(dxc) > max_slew) max_slew = abs(dxc);
+		} else {
+			xcoeff[i] = 0;
+		}
+
+		int dyc = 2*(ycf - last_ycoeff);
+		if (!VARIABLE_SETTLING || dyc) {
+			ycoeff[i] = DAC_B | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)ycf;
+			last_ycoeff = ycf;
+			if(abs(dyc) > max_slew) max_slew = abs(dyc);
+		} else {
+			ycoeff[i] = 0;
+		}
 
 		uint16_t delta = (uint16_t)abs(larger_delta)/2;
 		int clamp;
@@ -369,14 +419,51 @@ unsigned setup_line_int_(unsigned i, int x0, int y0, int x1, int y1, uint8_t das
 		// The limit DAC may have an offset relative to position DAC,
 		// which leads lines to overshoot or undershoot their limit.
 		// Add a correction which can either be manually measured with DVM,
-		// or self calibrated (TODO).
-		clamp += line_limit_x ? limit_adj_units_x : limit_adj_units_y;
+		// or self calibrated (TODO). (limit_adj_units_x/y)
 
-		limit_dac[i] = (uint16_t)( (line_limit_x ? DAC_A : DAC_B) | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)clamp );
+		if (line_limit_x) {
+			clamp += limit_adj_units_x;
+			limit_dac[i] = (uint16_t)( DAC_A | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)clamp );
+			int dlimit = 2*(clamp - last_limit_x);
+			last_limit_x = clamp;
+			if(abs(dlimit) > max_slew) max_slew = abs(dlimit);
+		} else {
+			clamp += limit_adj_units_y;
+			limit_dac[i] = (uint16_t)( DAC_B | DAC_BUFFERED | DAC_GAINx2 | DAC_ACTIVE | (uint16_t)clamp );
+			int dlimit = 2*(clamp - last_limit_y);
+			last_limit_y = clamp;
+			if(abs(dlimit) > max_slew) max_slew = abs(dlimit);
+		}
 	}
 
-	pos_dac_x[i] = DAC_A | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posx;
-	pos_dac_y[i] = DAC_B | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posy;
+	int dxp = posx - last_pos_x;
+	if (!VARIABLE_SETTLING || dxp) {
+		pos_dac_x[i] = DAC_A | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posx;
+		last_pos_x = posx;
+		if(abs(dxp) > max_slew) max_slew = abs(dxp);
+	} else {
+		pos_dac_x[i] = 0; // do not update
+	}
+
+	int dyp = posy - last_pos_y;
+	if (!VARIABLE_SETTLING || dyp) {
+		pos_dac_y[i] = DAC_B | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)posy;
+		last_pos_y = posy;
+		if(abs(dyp) > max_slew) max_slew = abs(dyp);
+	} else {
+		pos_dac_y[i] = 0; // do not update
+	}
+
+
+	// Compute expected slew time
+	// Datasheet has slew rate of 0.55V/µs and typical settling time of 4.5µs
+	// slew volts = 2.5 * max_slew / 4096
+	// slew microseconds = 2.5 * max_slew / (4096 * 0.55)
+	// delay() parameter = 100 * 2.5 * max_slew / (4096 * 0.55 * 12.5)
+	//                   ~= max_slew / 112    (how slow is integer divide??)
+
+	settle_delay[i] = max_slew/112;
+
 
 	// suppress lines that push DACs out of bounds
 	// TODO: proper clipping
@@ -538,9 +625,9 @@ void execute_pt(unsigned i) {
 	uint16_t dac_x = DAC_A | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)(2048 + (((int)ptx[i] - 128)*48));
 	uint16_t dac_y = DAC_B | DAC_BUFFERED | DAC_GAINx1 | DAC_ACTIVE | (uint16_t)(2048 - (((int)pty[i] - 128)*48));
 
-	unsigned dly = abs(dac_x - last_pos_x);
-	if (abs(dac_y - last_pos_y) > dly) {
-		dly = abs(dac_y - last_pos_y);
+	unsigned delta = abs(dac_x - last_pos_x);
+	if (abs(dac_y - last_pos_y) > delta) {
+		delta = abs(dac_y - last_pos_y);
 	}
 
 	if (dac_x != last_pos_x) {
@@ -557,7 +644,7 @@ void execute_pt(unsigned i) {
 	// of voltage slew the DAC needs to do
 	// Note op amp slew is also involved! (summing amp)
 	// dly is the change in DAC value (max 4096)
-	delay(dly/4);
+	delay(delta/112);
 
 	// Unblank Z
     BOARD_INITPINS_Z_BLANK_FGPIO->PSOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
@@ -571,10 +658,10 @@ void execute_pt(unsigned i) {
 volatile unsigned stop_flag;
 
 void execute_line(unsigned i) {
-	static uint16_t last_pos_x, last_pos_y, last_z, last_xcoeff, last_ycoeff;
+	static uint16_t last_pos_x, last_pos_y;
 
 	if (i == 0) { // reset state at start of display list
-		last_pos_x = last_pos_y = last_z = last_xcoeff = last_ycoeff = 0;
+		last_pos_x = last_pos_y = 0;
 	}
 
 	if(FRAME_SYNC && i == 0) {
@@ -611,14 +698,27 @@ void execute_line(unsigned i) {
 		// Unconditionally setting these DACs gives a bit of extra time.
 		// TODO: Measure this and compare with actual reset time required.
 
-		spi(DAC_POS, pos_dac_x[i]);
-		last_pos_x = pos_dac_x[i];
-		spi(DAC_POS, pos_dac_y[i]);
-		last_pos_y = pos_dac_y[i];
+		unsigned max_slew = 0;
+		int dx = abs(pos_dac_x[i] - last_pos_x);
+		if (dx) {
+			spi(DAC_POS, pos_dac_x[i]);
+			last_pos_x = pos_dac_x[i];
+			if (dx > max_slew) {
+				max_slew = dx;
+			}
+		}
+		int dy = abs(pos_dac_y[i] - last_pos_y);
+		if (dy) {
+			spi(DAC_POS, pos_dac_y[i]);
+			last_pos_y = pos_dac_y[i];
+			if (dy > max_slew) {
+				max_slew = dy;
+			}
+		}
 
-		four_microseconds();
-		four_microseconds();
-		four_microseconds();
+		delay(max_slew/112);
+
+	    if(i == 0) BOARD_INITPINS_TRIGGER_FGPIO->PSOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Raise trigger
 
 		// Unblank Z
 	    BOARD_INITPINS_Z_ENABLE_FGPIO->PSOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
@@ -631,6 +731,8 @@ void execute_line(unsigned i) {
 	    BOARD_INITPINS_Z_ENABLE_FGPIO->PCOR = BOARD_INITPINS_Z_ENABLE_GPIO_PIN_MASK;
 	    BOARD_INITPINS_Z_BLANK_FGPIO->PCOR = BOARD_INITPINS_Z_BLANK_GPIO_PIN_MASK;
 
+	    BOARD_INITPINS_TRIGGER_FGPIO->PCOR = BOARD_INITPINS_TRIGGER_GPIO_PIN_MASK; // Drop trigger
+
 		return;
 	}
 
@@ -640,44 +742,42 @@ void execute_line(unsigned i) {
 	// so 0.9 x 2 x 2.5 = 4.5V. This takes about 8µs.
 	// We cannot release HOLD and RESET until coefficient DACs have settled.
 
-
-	if (xcoeff[i] != last_xcoeff) {
-		spi(DAC_COEFF, xcoeff[i]);
-		last_xcoeff = xcoeff[i];
-	}
-	if (ycoeff[i] != last_ycoeff) {
-		spi(DAC_COEFF, ycoeff[i]);
-		last_ycoeff = ycoeff[i];
-	}
-
-// These may also take 8-9µs to settle
-	if (pos_dac_x[i] != last_pos_x) {
-		spi(DAC_POS, pos_dac_x[i]);
-		last_pos_x = pos_dac_x[i];
-	}
-	if (pos_dac_y[i] != last_pos_y) {
-		spi(DAC_POS, pos_dac_y[i]);
-		last_pos_y = pos_dac_y[i];
-	}
-
 	// Set either a high-crossing or low-crossing threshold at the limit DAC.
 	// If limitlow[i] is set, it means we must invert the comparator output
 	spi(DAC_LIMIT, limit_dac[i]);
 
-    // Add some settling time for limit DAC. Without this, some lines may be dropped/truncated.
+	if (xcoeff[i]) {
+		spi(DAC_COEFF, xcoeff[i]);
+	}
+	if (ycoeff[i]) {
+		spi(DAC_COEFF, ycoeff[i]);
+	}
+
+	if (pos_dac_x[i]) {
+		spi(DAC_POS, pos_dac_x[i]);
+	}
+	if (pos_dac_y[i]) {
+		spi(DAC_POS, pos_dac_y[i]);
+	}
+
+	if (VARIABLE_SETTLING) {
+		delay(settle_delay[i]); // May need fudge factor.. or overheads may compensate
+	} else {
+	    // Add some settling time for limit DAC. Without this, some lines may be dropped/truncated.
+		four_microseconds();
+		//four_microseconds();
+		//four_microseconds();
+	}
+
 
 	// By testing the display list in random order, we can see that repeatability
 	// is not very good even if ample settling time (e.g. 12µs) is allowed here.
 	//   Therefore the display list should be ordered for good locality,
 	// not just in position, but also coefficients to an extent, which tend to slew far
 	// even for close-together lines.
-	//   We may need to consider running the coefficient DACs at GAIN X 1
+	//   TODO: Try running the coefficient DACs at GAIN X 1
 	// (can compensate by halving the integration resistors), which makes the slew faster?
 	// TODO: Although it's still unclear whether buffered/unbuffered affects this.
-
-	four_microseconds();
-	//four_microseconds();
-	//four_microseconds();
 
 
 	BOARD_INITPINS_INT_RESET_FGPIO->PCOR = BOARD_INITPINS_INT_RESET_GPIO_PIN_MASK; // Open INT RESET
@@ -1097,6 +1197,40 @@ int main(void) {
 		}
 	}
 
+	// Points benchmark (also to test variable settling delay)
+
+	if(0) {
+		unsigned j = 0, items = DISPLAY_LIST_MAX;
+		uint16_t perm[items];
+
+		int square = 1500;
+		/*setup_line_int(j++, -square, -square,  square, -square, 0, MAX_Z_LEVEL, 0);
+		setup_line_int(j++,  square, -square,  square,  square, 0, MAX_Z_LEVEL, 0);
+		setup_line_int(j++,  square,  square, -square,  square, 0, MAX_Z_LEVEL, 0);
+		setup_line_int(j++, -square,  square, -square, -square, 0, MAX_Z_LEVEL, 0);*/
+
+		for(int xx = -9; xx <= 9; ++xx) {
+			for(int yy = -9; yy <= 9; ++yy) {
+				int ptx = xx*150;// + (abs(rand()) % 120);
+				int pty = yy*150;// + (abs(rand()) % 120);
+				setup_line_int(j++, ptx, pty, ptx, pty, 5, MAX_Z_LEVEL, 0);
+			}
+		}
+
+		for(uint16_t i = 0; i < j; ++i) {
+			perm[i] = i;
+		}
+
+		//shuffle_display_list(j, perm);
+		//sort_display_list(j, perm);
+
+		for(;;) {
+			for(unsigned i = 0; i < j; ++i) {
+				execute_line(perm[i]);
+			}
+		}
+	}
+
 #define width_words 2
 #define height_rows 64
 #define word_bits (sizeof(uint32_t)*8)
@@ -1313,7 +1447,7 @@ int main(void) {
 
 	if(0) {
 		// These 400 short lines execute at about 50.74 Hz or about 20,200 vectors per second
-		// Integrating R: 15 kΩ  C: 0.1nF
+		// Integrating R: 15 kΩ  C: 10nF
 		unsigned j = 0;
 		for(int i = 0; i < 100; ++i) {
 			int x = ((i/10)-5)*300, y = ((i % 10)-5)*300;
